@@ -133,7 +133,7 @@ module swing_arm() {
                     rounded_block([arm_tip_w, mount_pad_d, arm_t], 12);
                 }
 
-            translate([0, arm_root_d / 2 + 10, -arm_t])
+            translate([0, arm_root_d / 2 - 4, -arm_t])
                 rotate([0, 0, -20])
                     cube([lug_w, lug_len, arm_t], center = true);
         }
@@ -208,7 +208,7 @@ module table_assembly() {
                     color([0.95, 0.77, 0.56])
                         table_top();
 
-                translate([0, 0, -washer_t - explode / 2])
+                translate([0, 0, arm_t + washer_t + pivot_cap_t + explode / 2])
                     color([0.12, 0.12, 0.14])
                         pivot_cap();
             }
