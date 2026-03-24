@@ -1,5 +1,7 @@
 # Wall-Mounted Swivel Table - 3D Printing Guide
 
+![Assembly View](renders/assembly.png)
+
 ## Overview
 This is a 3D printable wall-mounted table that swivels in and out from the wall. The design is inspired by commercial wall-mounted fold-down tables but is fully customizable and printable on a Bambu P2S printer.
 
@@ -19,6 +21,13 @@ The table is designed to hold several pounds when properly mounted:
 - Proper wall mounting is critical for weight capacity
 
 ## Parts List
+
+### Visual Reference
+| Wall Bracket | Swivel Post | Table Top |
+|:---:|:---:|:---:|
+| ![Wall Bracket](renders/wall_bracket.png) | ![Swivel Post](renders/swivel_post.png) | ![Table Top](renders/table_top.png) |
+| **Bearing Sleeve** | **Friction Washer** | **Complete Assembly** |
+| ![Bearing Sleeve](renders/bearing_sleeve.png) | ![Friction Washer](renders/friction_washer.png) | ![Assembly](renders/assembly.png) |
 
 ### 3D Printed Parts
 1. **Wall Bracket** (wall_bracket_v2.stl) - 80×50×150mm
