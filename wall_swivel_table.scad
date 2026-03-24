@@ -296,11 +296,6 @@ module table_top() {
 
 // ============== ASSEMBLY ==============
 module assembly() {
-    // Semi-transparent wall
-    %translate([-50, -10, -25])
-        color([0.9, 0.88, 0.85])
-        cube([180, 10, wb_height + 50]);
-
     // 1. Wall bracket (fixed)
     color([0.25, 0.50, 0.80])
         wall_bracket();
