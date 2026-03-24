@@ -51,7 +51,7 @@ if __name__ == "__main__":
     print("Bambu P2S Print Bed: 240 x 256 mm")
     print("=" * 50)
 
-    files = ["wall_bracket.stl", "swivel_post.stl", "table_top.stl", "bearing_sleeve.stl"]
+    files = ["wall_bracket_v2.stl", "swivel_post_v2.stl", "table_top_v2.stl", "bearing_sleeve_v2.stl", "friction_washer.stl"]
     all_fit = True
 
     for filename in files:
