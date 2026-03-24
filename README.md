@@ -1,206 +1,254 @@
-# Wall-Mounted Swivel Table - 3D Printing Guide
+# Wall-Mounted Swivel Table Design Collection
 
-![Assembly View](renders/assembly.png)
+This repository contains 11 different variations of 3D-printable wall-mounted swivel tables. Each design offers unique features and characteristics to suit different needs and preferences.
 
-## Overview
-This is a 3D printable wall-mounted table that swivels in and out from the wall. The design is inspired by commercial wall-mounted fold-down tables but is fully customizable and printable on a Bambu P2S printer.
+## Design Overview
 
-## Design Features
-
-### Structural Features
-- **Reinforced wall bracket** with triangular bracing for maximum strength
-- **Smooth swivel mechanism** using a bearing sleeve and friction rings
-- **Strong table surface** with raised edges and extensive internal reinforcement
-- **Modular design** - all parts fit on Bambu P2S print bed (240x256mm)
-- **Adjustable friction** using optional friction washers
-
-### Weight Capacity
-The table is designed to hold several pounds when properly mounted:
-- Estimated capacity: 5-10 lbs (2-5 kg) depending on material and print quality
-- PETG recommended for maximum strength
-- Proper wall mounting is critical for weight capacity
-
-## Parts List
-
-### Visual Reference
-| Wall Bracket | Swivel Post | Table Top |
-|:---:|:---:|:---:|
-| ![Wall Bracket](renders/wall_bracket.png) | ![Swivel Post](renders/swivel_post.png) | ![Table Top](renders/table_top.png) |
-| **Bearing Sleeve** | **Friction Washer** | **Complete Assembly** |
-| ![Bearing Sleeve](renders/bearing_sleeve.png) | ![Friction Washer](renders/friction_washer.png) | ![Assembly](renders/assembly.png) |
-
-### 3D Printed Parts
-1. **Wall Bracket** (wall_bracket_v2.stl) - 80×50×150mm
-   - Mounts to wall with 3 screws
-   - Contains swivel post socket
-
-2. **Swivel Post** (swivel_post_v2.stl) - 50×50×130mm
-   - Rotates in bearing sleeve
-   - Attaches to table top
-
-3. **Table Top** (table_top_v2.stl) - 200×150×31mm
-   - Main surface with raised edge
-   - Heavy internal reinforcement
-
-4. **Bearing Sleeve** (bearing_sleeve_v2.stl) - 28.5×28.5×33mm
-   - Provides smooth rotation interface
-   - Includes grease channels
-
-5. **Friction Washers** (friction_washer.stl) - 31×31×2mm (optional)
-   - Print 1-3 for adjustable friction
-   - Prevents table from rotating on its own
-
-### Required Hardware
-- **3x M4×40mm screws** - Wall mounting (adjust length based on wall type)
-- **3x M4 wall anchors** - For drywall/plaster (or appropriate for your wall type)
-- **8x M4×12mm screws** - Table to swivel post attachment
-- **Washers** - M4 washers for screw connections
-- **Grease/Lubricant** (optional) - For smoother rotation
-
-### Recommended Tools
-- Drill with 5mm bit
-- Screwdriver (Phillips or hex, depending on screw choice)
-- Level
-- Stud finder (if mounting to studs)
-- 3D printer filament (PETG or PLA)
-
-## Print Settings
-
-### Recommended Settings
-- **Material**: PETG (preferred) or PLA
-- **Layer Height**: 0.2mm
-- **Infill**: 40-50% for structural parts, 20-30% for table top
-- **Wall Count**: 4-5 perimeters
-- **Top/Bottom Layers**: 5-6 layers
-- **Supports**: Required for wall bracket's swivel socket area
-- **Bed Adhesion**: Brim or raft recommended for larger parts
-
-### Print Order Priority
-1. Wall Bracket (longest print, most important)
-2. Swivel Post
-3. Bearing Sleeve
-4. Table Top
-5. Friction Washers (if needed)
-
-### Estimated Print Times (approx.)
-- Wall Bracket: 8-12 hours
-- Swivel Post: 6-8 hours
-- Table Top: 12-16 hours
-- Bearing Sleeve: 1-2 hours
-- Friction Washer: 15-30 minutes each
-
-## Assembly Instructions
-
-### Step 1: Prepare Parts
-1. Remove all support material
-2. Clean up any stringing or rough edges with sandpaper
-3. Test fit swivel post into bearing sleeve (should be snug but able to rotate)
-4. If friction is too high, sand the swivel post lightly
-
-### Step 2: Install Bearing Sleeve
-1. Press bearing sleeve into wall bracket's socket
-2. It should fit snugly (use rubber mallet if needed)
-3. Optional: Apply lubricant to grease channels
-
-### Step 3: Mount Wall Bracket
-1. Mark desired height on wall (recommend 75-90cm/30-36" from floor)
-2. Use level to mark 3 screw positions
-3. If mounting to drywall:
-   - Drill pilot holes
-   - Install wall anchors
-   - Screw bracket to wall with M4×40mm screws
-4. If mounting to studs:
-   - Locate studs
-   - Drill pilot holes
-   - Screw directly into studs (stronger)
-
-### Step 4: Attach Table to Swivel Post
-1. Position table top face-down on soft surface
-2. Insert swivel post mounting plate into table bottom
-3. Align screw holes (8 positions around circumference)
-4. Install M4×12mm screws through table into mounting plate
-5. Tighten evenly in star pattern
-
-### Step 5: Install Swivel Assembly
-1. Apply light lubricant to swivel post
-2. Insert swivel post into bearing sleeve (taper-end first)
-3. Push until fully seated
-4. Test rotation - should be smooth but controlled
-
-### Step 6: Adjust Friction (Optional)
-1. If table rotates too easily, add friction washers
-2. Place 1-3 washers between swivel post and bearing sleeve
-3. Test rotation after each washer
-4. Find optimal balance between smooth and controlled
-
-## Usage Tips
-1. **Break-in Period**: First few rotations may be stiff - this is normal
-2. **Lubrication**: Reapply lubricant every 6-12 months for smooth operation
-3. **Weight Distribution**: Place heavier items closer to wall for stability
-4. **Rotation**: Use steady, controlled force - don't jerk or slam
-5. **Maintenance**: Periodically check screws for tightness
-
-## Design Specifications
-- **Table Surface**: 200mm × 150mm (7.9" × 5.9")
-- **Height from Wall**: ~120mm (4.7") when extended
-- **Rotation**: 180+ degrees (limited by wall clearance)
-- **Swivel Diameter**: 28mm
-- **Wall Bracket Height**: 150mm
-
-## Customization
-The OpenSCAD source file (wall_swivel_table.scad) is fully parametric. You can modify:
-- Table size (width/depth/thickness)
-- Wall bracket dimensions
-- Swivel post length
-- Bearing clearances
-- Screw hole sizes
-
-## Troubleshooting
-
-### Table won't rotate smoothly
-- Sand swivel post lightly
-- Apply lubricant
-- Remove friction washers
-
-### Table rotates too easily / won't stay in position
-- Add friction washers
-- Tighten mounting screws
-- Check bearing sleeve is properly seated
-
-### Parts don't fit together
-- Check print scaling (should be 100%)
-- Adjust clearance parameters in SCAD file
-- Light sanding of tight spots
-
-### Wall bracket feels weak
-- Re-print with higher infill (50%+)
-- Use PETG instead of PLA
-- Ensure proper wall mounting (into studs if possible)
-
-## Safety Notes
-- ⚠️ **Maximum weight capacity**: 5-10 lbs depending on material and mounting
-- ⚠️ **Proper wall mounting is critical** - use appropriate anchors for your wall type
-- ⚠️ **Not suitable for heavy equipment** or climbing
-- ⚠️ **Check mounting screws periodically** for loosening
-- ⚠️ **Supervise children** when using the table
-
-## Files Included
-- `wall_swivel_table.scad` - OpenSCAD source file (fully parametric)
-- `wall_bracket_v2.stl` - STL for wall bracket
-- `swivel_post_v2.stl` - STL for swivel post
-- `table_top_v2.stl` - STL for table top
-- `bearing_sleeve_v2.stl` - STL for bearing sleeve
-- `friction_washer.stl` - STL for optional friction washers
-- `assembly_v2.stl` - STL of complete assembly (for visualization)
-- `check_dimensions.py` - Python script to verify parts fit print bed
-
-## License
-This design is provided as-is for personal use. Modify and adapt as needed for your specific requirements.
-
-## Version History
-- **v2** (Current) - Improved reinforcement, better swivel mechanism, friction washers
-- **v1** - Initial design
+All designs are:
+- **3D printable** on Bambu P2S (240x256mm build plate)
+- **Parametric OpenSCAD** source files included
+- **Modular** - parts print separately and assemble
+- **Swivel mechanism** - rotates for in/out positioning
+- Compatible with **PETG or PLA** (PETG recommended for strength)
 
 ---
 
-*Designed for Bambu P2S printer - March 2026*
+## Original Design
+
+**Location:** `original/`
+
+The baseline design that inspired all variations. Features balanced dimensions, solid reinforcement, and adjustable friction mechanism.
+
+- **Table Size:** 200mm × 150mm
+- **Features:** Friction washers, raised edge, extensive reinforcement
+- **Use Case:** General purpose small table
+
+![Original Design](original/renders/assembly.png)
+
+---
+
+## Design 1: Compact
+
+**Location:** `1/`
+
+Reduced dimensions for tight spaces like bedside tables or small workspaces.
+
+- **Table Size:** 150mm × 100mm (25% smaller)
+- **Bracket:** 60mm wide, 120mm tall
+- **Hardware:** M3 screws (lighter duty)
+- **Features:** Simplified design, minimal footprint
+- **Use Case:** Nightstand, small shelf, phone holder
+
+![Design 1](1/renders/assembly.png)
+
+---
+
+## Design 2: Large Heavy-Duty
+
+**Location:** `2/`
+
+Larger workspace with enhanced load capacity and stability.
+
+- **Table Size:** 250mm × 180mm (25% larger)
+- **Bracket:** 100mm wide, 180mm tall
+- **Hardware:** M5 screws, 4 wall mounting points
+- **Features:** Thicker construction (15mm bracket, 12mm table), heavy reinforcement
+- **Use Case:** Laptop desk, workspace, craft table
+
+![Design 2](2/renders/assembly.png)
+
+---
+
+## Design 3: Triangular
+
+**Location:** `3/`
+
+Unique triangular table surface for aesthetic variation and corner mounting.
+
+- **Table Size:** 220mm base × 190mm depth (triangular)
+- **Features:** Y-shaped reinforcement pattern, rounded triangle shape
+- **Use Case:** Decorative shelf, corner accent, unique aesthetic
+
+![Design 3](3/renders/assembly.png)
+
+---
+
+## Design 4: Oval/Rounded
+
+**Location:** `4/`
+
+Smooth oval design with no sharp corners for a modern, sleek appearance.
+
+- **Table Size:** 210mm × 160mm (oval)
+- **Features:** Radial reinforcement, curved edges, elegant profile
+- **Use Case:** Modern decor, safer edges, artistic display
+
+![Design 4](4/renders/assembly.png)
+
+---
+
+## Design 5: Dual-Tier Shelf
+
+**Location:** `5/`
+
+Two-level design for maximum storage in vertical space.
+
+- **Table Size:** 2× shelves at 180mm × 140mm
+- **Tier Spacing:** 80mm vertical separation
+- **Bracket:** 200mm tall to accommodate both tiers
+- **Features:** Double storage, synchronized swivel
+- **Use Case:** Books, plants, collectibles, bathroom storage
+
+![Design 5](5/renders/assembly.png)
+
+---
+
+## Design 6: Folding with Locking Positions
+
+**Location:** `6/`
+
+Features mechanical detents that lock at 3 positions (0°, 90°, 180°).
+
+- **Table Size:** 200mm × 150mm
+- **Features:** Detent grooves and bumps, locking positions, controlled movement
+- **Use Case:** Situations requiring stable locked positions, prevents unwanted rotation
+
+![Design 6](6/renders/assembly.png)
+
+---
+
+## Design 7: Adjustable Height
+
+**Location:** `7/`
+
+Telescoping post design allows height adjustment.
+
+- **Table Size:** 190mm × 145mm
+- **Height Range:** 3 adjustable positions (20mm increments)
+- **Features:** Outer sleeve and inner sliding post, locking pin mechanism
+- **Use Case:** Multi-user household, ergonomic adjustment, flexible workspace
+
+![Design 7](7/renders/assembly.png)
+
+---
+
+## Design 8: Corner-Mount
+
+**Location:** `8/`
+
+L-shaped bracket designed to mount in room corners at 45° angle.
+
+- **Table Size:** 200mm × 150mm
+- **Bracket:** L-shaped, mounts to two walls
+- **Features:** Corner utilization, diagonal bracing, dual wall mounting
+- **Use Case:** Corner spaces, room angles, maximizing unused space
+
+![Design 8](8/renders/assembly.png)
+
+---
+
+## Design 9: Heavy-Duty with Metal Inserts
+
+**Location:** `9/`
+
+Industrial-strength design with cavities for threaded metal inserts.
+
+- **Table Size:** 220mm × 160mm
+- **Bracket:** 95mm wide, 16mm thick, 170mm tall
+- **Hardware:** M5 threaded inserts, M5 screws
+- **Features:** Extra thick construction (14mm table), massive reinforcement, metal insert compatibility
+- **Use Case:** Heavy loads (10+ lbs), tool holders, equipment mounting
+
+![Design 9](9/renders/assembly.png)
+
+---
+
+## Design 10: Minimalist Ultra-Thin
+
+**Location:** `10/`
+
+Sleek, thin profile for modern minimalist aesthetics.
+
+- **Table Size:** 180mm × 130mm
+- **Thickness:** 6mm table, 8mm bracket (ultra-thin)
+- **Hardware:** M3 screws (lightweight)
+- **Features:** Minimal material, clean lines, subtle profile
+- **Use Case:** Light duty only, decorative, modern design, small items
+
+![Design 10](10/renders/assembly.png)
+
+---
+
+## Comparison Chart
+
+| Design | Table Size (mm) | Wall Bracket | Thickness | Load Capacity | Best For |
+|--------|----------------|--------------|-----------|---------------|----------|
+| **Original** | 200×150 | 80×150 | 12mm | Medium | General use |
+| **1: Compact** | 150×100 | 60×120 | 10mm | Light | Tight spaces |
+| **2: Large** | 250×180 | 100×180 | 15mm | Heavy | Workspace |
+| **3: Triangle** | 220×190 | 80×150 | 12mm | Medium | Aesthetic |
+| **4: Oval** | 210×160 | 80×150 | 12mm | Medium | Modern look |
+| **5: Dual-Tier** | 180×140 (×2) | 80×200 | 12mm | Medium | Storage |
+| **6: Locking** | 200×150 | 80×150 | 12mm | Medium | Stability |
+| **7: Adjustable** | 190×145 | 80×160 | 12mm | Medium | Flexibility |
+| **8: Corner** | 200×150 | 90×150 | 12mm | Medium | Corners |
+| **9: Heavy-Duty** | 220×160 | 95×170 | 16mm | Very Heavy | Industrial |
+| **10: Minimal** | 180×130 | 60×120 | 8mm | Very Light | Decoration |
+
+## Printing Guide
+
+### General Settings
+- **Material:** PETG (recommended) or PLA
+- **Layer Height:** 0.2mm
+- **Infill:** 30-50% (higher for load-bearing parts)
+- **Supports:** Required for wall bracket swivel socket
+- **Perimeters:** 4-5 walls for strength
+
+### Material Recommendations by Design
+- **Designs 1, 10:** PLA acceptable (light duty)
+- **Designs 2, 9:** PETG strongly recommended (heavy duty)
+- **All others:** PETG recommended, PLA acceptable
+
+### Hardware Required (Typical)
+- **Wall Mounting:** M4 or M5 screws + appropriate wall anchors
+- **Assembly:** M4 or M5 machine screws + washers
+- **Optional:** Lubricant for smooth swivel action
+
+## Assembly Notes
+
+1. Print all parts for your chosen design
+2. Remove supports and clean up parts
+3. Test-fit swivel post in bearing sleeve
+4. Install bearing sleeve in wall bracket
+5. Mount bracket securely to wall (find studs for heavy designs)
+6. Attach table to swivel post with screws
+7. Insert assembled swivel into wall bracket
+8. Test rotation and adjust friction if needed
+
+## Customization
+
+All designs are parametric OpenSCAD files. You can modify:
+- Dimensions (width, depth, height)
+- Swivel diameter and clearances
+- Mounting hole positions and sizes
+- Reinforcement patterns
+- Material thickness
+
+## Safety Notes
+
+⚠️ **Important:**
+- Use appropriate wall anchors for your wall type
+- Mount to studs when possible for heavy-duty designs
+- Do not exceed recommended weight capacities
+- Regularly check mounting screws for tightness
+- Supervise children around swivel mechanisms
+
+## License
+
+All designs are provided as-is for personal use. Feel free to modify and adapt for your needs.
+
+---
+
+**Design Collection Created:** March 2026
+**Tool:** OpenSCAD
+**Printer:** Bambu P2S (240×256mm)
