@@ -1,6 +1,6 @@
 $fn = 72;
 
-mode = "assembly"; // ["assembly", "plate"]
+mode = "assembly"; // ["assembly", "plate_a", "plate_b"]
 part = "all"; // ["all", "wall_plate", "swing_arm", "table_top", "pivot_cap"]
 swing_angle = 18; // 0=open, 90=swung toward the wall
 explode = 0;
@@ -53,8 +53,9 @@ mount_spacing_y = 22;
 table_center_y = arm_len + 48;
 
 module rr2d(size = [10, 10], r = 2) {
-    offset(r = r)
-        square([size[0] - 2 * r, size[1] - 2 * r], center = true);
+    rr = min(r, size[0] / 2 - 0.01, size[1] / 2 - 0.01);
+    offset(r = rr)
+        square([size[0] - 2 * rr, size[1] - 2 * rr], center = true);
 }
 
 module rounded_block(size = [10, 10, 10], r = 2) {
@@ -216,20 +217,22 @@ module table_assembly() {
     hardware_preview();
 }
 
-module print_plate() {
-    translate([-95, 0, 0])
-        wall_plate();
+module print_plate_a() {
+    table_top();
 
-    translate([65, 16, arm_t])
+    translate([0, 124, pivot_cap_t])
+        rotate([180, 0, 0])
+            pivot_cap();
+}
+
+module print_plate_b() {
+    translate([-48, 0, arm_t])
         rotate([180, 0, 0])
             swing_arm();
 
-    translate([0, 176, 0])
-        table_top();
-
-    translate([98, 118, pivot_cap_t])
-        rotate([180, 0, 0])
-            pivot_cap();
+    translate([56, 0, 48])
+        rotate([90, 0, 0])
+            wall_plate();
 }
 
 if (part == "wall_plate")
@@ -240,7 +243,9 @@ else if (part == "table_top")
     table_top();
 else if (part == "pivot_cap")
     pivot_cap();
-else if (mode == "plate")
-    print_plate();
+else if (mode == "plate_a")
+    print_plate_a();
+else if (mode == "plate_b")
+    print_plate_b();
 else
     table_assembly();

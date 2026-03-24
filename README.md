@@ -36,14 +36,16 @@ This repository contains a parametric OpenSCAD design for a small wall-mounted t
 ## How to use the model
 
 - Preview assembled table: open `wall_swivel_table.scad` with `mode = "assembly"`
-- Show a flat print layout: set `mode = "plate"`
+- Show printable plate A: set `mode = "plate_a"`
+- Show printable plate B: set `mode = "plate_b"`
 - Export a single part: set `part` to `wall_plate`, `swing_arm`, `table_top`, or `pivot_cap`
 
 Example CLI exports:
 
 ```sh
-openscad -o wall_plate.stl -D 'part="wall_plate"' /home/runner/work/agent-sandbox/agent-sandbox/wall_swivel_table.scad
-openscad -o print_plate.stl -D 'mode="plate"' /home/runner/work/agent-sandbox/agent-sandbox/wall_swivel_table.scad
+openscad -o wall_plate.stl -D 'part="wall_plate"' ./wall_swivel_table.scad
+openscad -o print_plate_a.stl -D 'mode="plate_a"' ./wall_swivel_table.scad
+openscad -o print_plate_b.stl -D 'mode="plate_b"' ./wall_swivel_table.scad
 ```
 
 ## Assembly notes
