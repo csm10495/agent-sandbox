@@ -21,8 +21,6 @@
  *  swivel_arm     |  1  | PETG     |  5    | 45 %   | critical structural
  *  table_top      |  1  | PLA/PETG |  3    | 20 %   | decorative ribs add stiffness
  *  pivot_cap      |  1  | PETG     |  4    | 30 %   | bolt-head cover
- *  support_leg    |  1  | PETG     |  4    | 30 %   | optional floor brace
- *  leg_bracket    |  1  | PETG     |  4    | 30 %   | mounts leg to arm
  *
  * ─────────────────────────────────────────────────────────────
  *  HARDWARE REQUIRED
@@ -32,14 +30,13 @@
  *  • 1× M8 nylon-insert lock nut  (adjusts swivel friction)
  *  • 4× M5 × 50 mm screws + wall anchors  (wall mount – use studs!)
  *  • 4× M4 × 20 mm screws + M4 hex nuts   (table top ↔ arm)
- *  • 2× M4 × 25 mm bolts + M4 hex nuts    (leg hinge + stop pin)
  *  • Optional: 2× M4 × 12 mm self-tapping screws (pivot_cap clip)
  *
  * ─────────────────────────────────────────────────────────────
  *  PRINT PLATES  (set VIEW below)
  * ─────────────────────────────────────────────────────────────
- *  Plate 1  –  wall_bracket + pivot_cap + leg_bracket
- *  Plate 2  –  swivel_arm + support_leg   (arm on its side, socket bore up)
+ *  Plate 1  –  wall_bracket + pivot_cap
+ *  Plate 2  –  swivel_arm   (on its side, socket bore up)
  *  Plate 3  –  table_top  (flat on bed)
  *
  *  VIEW values:
@@ -49,8 +46,6 @@
  *    "swivel_arm"     arm part only
  *    "table_top"      table top only
  *    "pivot_cap"      cap only
- *    "support_leg"    leg only
- *    "leg_bracket"    leg bracket only
  *    "plate1"         print plate 1
  *    "plate2"         print plate 2
  *    "plate3"         print plate 3
@@ -71,9 +66,6 @@
  *  7. Press pivot_cap onto the bolt head (snap-fit + optional M4 screw).
  *  8. Place table_top on top of the arm flange, holes aligned.
  *     Insert 4× M4 screws from below; thread into M4 nuts in the table.
- *  9. Attach leg_bracket to underside of arm with 2× M4 screws.
- * 10. Hinge support_leg through leg_bracket ears with M4 × 25 mm bolt.
- *     Second M4 bolt through the far lug acts as a 90° stop.
  */
 
 // ═══════════════════════════════════════════════════════
@@ -118,12 +110,6 @@ TT_D  = 200;            // depth  (Y)
 TT_H  = 9;              // thickness
 TT_R  = 14;             // corner radius
 TT_RIB_H = 6;           // underside rib height (stiffening)
-
-// ─── Support leg ───────────────────────────────────────
-LEG_L    = 220;         // length
-LEG_W    = 26;          // width
-LEG_THK  = 10;          // thickness
-LEG_EAR  = 14;          // lug height above leg body
 
 // ─── Hardware clearances ───────────────────────────────
 M4C  = 4.5;             // M4 clearance hole ∅
@@ -271,12 +257,6 @@ module swivel_arm() {
             for(yi = [ARM_LEN - flange_d + 7, ARM_LEN - 10])
                 translate([xi, yi, ARM_Z0 + ARM_H - M4ND - 0.3])
                     nut_trap();
-
-        // ── 2× M4 holes for leg bracket attachment ───────
-        lb_y = ARM_LEN * 0.52;
-        for(xi = [-ARM_W/2+10, ARM_W/2-10])
-            translate([xi, lb_y, ARM_Z0 - EPS])
-                cylinder(h=ARM_WALL + 1, d=M4C);
     }
 }
 
@@ -341,86 +321,6 @@ module pivot_cap() {
 }
 
 // ═══════════════════════════════════════════════════════
-//  PART 5 – SUPPORT LEG
-// ═══════════════════════════════════════════════════════
-// Hinge end has two ears with M4 bore; a rubber foot recess at the far end.
-// Origin: hinge-end bottom-centre.
-
-module support_leg() {
-    total_w = LEG_W + 6;        // total width including ear projections
-
-    difference() {
-        union() {
-            // ── Main leg body ─────────────────────────────
-            hull() {
-                cube([LEG_W, LEG_L - LEG_W/2, LEG_THK], center=false);
-                translate([LEG_W/2, LEG_L - LEG_W/2, 0])
-                    cylinder(h=LEG_THK, d=LEG_W);
-            }
-
-            // ── Two hinge ears at near end ────────────────
-            for(dx = [-3, LEG_W + 3 - LEG_W])
-                hull() {
-                    translate([dx, 0, 0])
-                        cube([3, LEG_W, LEG_THK]);
-                    translate([dx, 0, LEG_THK])
-                        cube([3, LEG_W, LEG_EAR - LEG_THK/2]);
-                    translate([dx + 1.5, LEG_W/2, LEG_THK + LEG_EAR - 3])
-                        sphere(r=1.5);
-                }
-        }
-
-        // ── M4 hinge bore through both ears ──────────────
-        translate([-4, LEG_W/2, LEG_THK + LEG_EAR/2])
-            rotate([0, 90, 0])
-                cylinder(h=total_w + 8, d=4.5);
-
-        // ── Rubber foot recess at far end ─────────────────
-        translate([LEG_W/2, LEG_L - LEG_W/2, -EPS])
-            cylinder(h=3.5, d=15);
-    }
-}
-
-// ═══════════════════════════════════════════════════════
-//  PART 6 – LEG BRACKET
-// ═══════════════════════════════════════════════════════
-// Screws to underside of arm; two vertical ears receive the leg hinge pin.
-
-module leg_bracket() {
-    bw  = LEG_W + 18;   // bracket plate width (wider than leg)
-    bd  = 28;            // bracket plate depth (Y)
-    bph = 16;            // ear/pin-holder height above base plate
-    bpt = 5;             // ear thickness
-
-    difference() {
-        union() {
-            // ── Base plate ────────────────────────────────
-            cube([bw, bd, 5]);
-
-            // ── Two vertical ears ─────────────────────────
-            for(xi = [0, bw - bpt])
-                translate([xi, 4, 5])
-                    cube([bpt, bd - 8, bph]);
-        }
-
-        // ── 2× M4 screw-through holes (into arm underside) ──
-        for(xi = [bw*0.25, bw*0.75])
-            translate([xi, bd/2, -EPS])
-                cylinder(h=6 + EPS, d=M4C);
-
-        // ── M4 hinge pin bore through ears ───────────────
-        translate([-EPS, bd/2, 5 + bph/2 + 2])
-            rotate([0, 90, 0])
-                cylinder(h=bw + EPS*2, d=4.5);
-
-        // ── 90° stop hole (second M4 bolt limits leg angle) ──
-        translate([-EPS, bd/2 + 8, 5 + 4])
-            rotate([0, 90, 0])
-                cylinder(h=bw + EPS*2, d=4.5);
-    }
-}
-
-// ═══════════════════════════════════════════════════════
 //  ASSEMBLED VIEW
 // ═══════════════════════════════════════════════════════
 
@@ -428,11 +328,6 @@ module assemble(swivel_deg = 90) {
     pivot_x = WB_W / 2;
     pivot_y = WB_D;
     pivot_z = POST_BASE_Z;
-
-    // ── Reference wall ────────────────────────────────────
-    color("WhiteSmoke", 0.18)
-        translate([-50, -8, -30])
-            cube([WB_W + 100, 8, WB_H + 60]);
 
     // ── Wall bracket ──────────────────────────────────────
     color([0.27, 0.51, 0.71], 0.97)   // steel blue
@@ -458,22 +353,6 @@ module assemble(swivel_deg = 90) {
         color([0.96, 0.88, 0.68], 0.97)  // warm wood
             translate([-TT_W/2, ARM_LEN - TT_D/2, tt_z])
                 table_top();
-
-        // leg bracket (underside of arm, ~52 % along arm)
-        lb_y = ARM_LEN * 0.52;
-        bw   = LEG_W + 18;
-        color([0.45, 0.52, 0.55], 0.95)
-            translate([-bw/2, lb_y - 14, arm_z_lift + ARM_Z0 - 5 - EPS])
-                leg_bracket();
-
-        // support leg folded down at 90° from arm underside
-        color([0.85, 0.38, 0.30], 0.95)  // terracotta
-            translate([-(LEG_W)/2,
-                        lb_y,
-                        arm_z_lift + ARM_Z0 - 5])
-            rotate([0, 90, 0])
-            rotate([0, 0, -90])
-                support_leg();
     }
 }
 
@@ -491,10 +370,6 @@ module plate1() {
     // pivot_cap beside bracket
     translate([WB_W + 18, 20, 0])
         pivot_cap();
-
-    // leg_bracket beside bracket
-    translate([WB_W + 18, 60, 0])
-        leg_bracket();
 }
 
 module plate2() {
@@ -503,10 +378,6 @@ module plate2() {
     translate([0, SOCK_H, 0])
     rotate([90, 0, 0])
         swivel_arm();
-
-    // support_leg beside arm
-    translate([SOCK_OD + 20, 0, 0])
-        support_leg();
 }
 
 module plate3() {
@@ -525,8 +396,6 @@ else if (VIEW=="wall_bracket") wall_bracket();
 else if (VIEW=="swivel_arm")   swivel_arm();
 else if (VIEW=="table_top")    table_top();
 else if (VIEW=="pivot_cap")    pivot_cap();
-else if (VIEW=="support_leg")  support_leg();
-else if (VIEW=="leg_bracket")  leg_bracket();
 else if (VIEW=="plate1")       plate1();
 else if (VIEW=="plate2")       plate2();
 else if (VIEW=="plate3")       plate3();

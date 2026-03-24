@@ -20,8 +20,6 @@ A fully 3D-printable wall-mounted table that swivels horizontally on a vertical 
 | 🟠 Orange | Swivel arm | Rotates around pivot post; carries table top |
 | 🟤 Wood/Wheat | Table top | 240 × 200 mm surface with stiffening ribs |
 | ⬜ Gray | Pivot cap | Covers bolt head; decorative |
-| 🔴 Terracotta | Support leg | Optional fold-down floor brace |
-| 🪨 Slate | Leg bracket | Attaches support leg to arm underside |
 
 The **pivot mechanism** is a 26 mm diameter PETG post (integral to the wall bracket) with a concentric M8 bore. The swivel arm's socket slides over the post. Friction is set by tightening an M8 nylon-insert lock nut — tighten for more resistance, loosen for easier swivel. Once set, the table stays in any swivelled position on its own.
 
@@ -31,7 +29,7 @@ A reinforcing **gusset blends** the socket smoothly into the box-section arm, an
 
 ## Parts to Print
 
-> **PETG strongly recommended** for all structural parts (wall_bracket, swivel_arm, leg). PLA+ is acceptable but PETG handles heat, humidity, and stress better.
+> **PETG strongly recommended** for all structural parts (wall_bracket, swivel_arm). PLA+ is acceptable but PETG handles heat, humidity, and stress better.
 
 | File | Qty | Material | Perimeters / Walls | Infill | Layer height | Notes |
 |:-----|:---:|:--------:|:-------------------:|:------:|:------------:|:------|
@@ -39,8 +37,6 @@ A reinforcing **gusset blends** the socket smoothly into the box-section arm, an
 | `stl/swivel_arm.stl` | 1 | **PETG** | 5 | 45 % | 0.2 mm | Print on its side (socket bore facing up) |
 | `stl/table_top.stl` | 1 | PLA or PETG | 3 | 20 % | 0.2 mm | Ribs face down; no supports needed |
 | `stl/pivot_cap.stl` | 1 | PETG | 4 | 30 % | 0.2 mm | Open end up; no supports needed |
-| `stl/support_leg.stl` | 1 | PETG | 4 | 30 % | 0.2 mm | Flat on bed; no supports needed |
-| `stl/leg_bracket.stl` | 1 | PETG | 4 | 30 % | 0.2 mm | Flat on bed; no supports needed |
 
 ### Recommended Bambu Studio settings
 - **Support**: None required for any part (all designed support-free in their print orientations)
@@ -53,8 +49,8 @@ A reinforcing **gusset blends** the socket smoothly into the box-section arm, an
 
 | Plate | Contents | Preview |
 |:------|:---------|:-------:|
-| Plate 1 | wall_bracket + pivot_cap + leg_bracket | ![Plate 1](renders/plate1.png) |
-| Plate 2 | swivel_arm + support_leg | ![Plate 2](renders/plate2.png) |
+| Plate 1 | wall_bracket + pivot_cap | ![Plate 1](renders/plate1.png) |
+| Plate 2 | swivel_arm | ![Plate 2](renders/plate2.png) |
 | Plate 3 | table_top | ![Plate 3](renders/plate3.png) |
 
 ---
@@ -69,7 +65,6 @@ A reinforcing **gusset blends** the socket smoothly into the box-section arm, an
 | M5 × 50 mm screws + wall anchors | 4 | Mount bracket to wall (use studs!) |
 | M4 × 20 mm screws | 4 | Attach table top to arm |
 | M4 hex nuts | 4 | Captured in arm nut traps |
-| M4 × 25 mm bolt + nut | 2 | Support leg hinge + 90° stop |
 | Optional: M4 × 12 mm self-tapping screws | 2 | Secure pivot cap |
 
 > **Wall mounting tip**: Drive M5 screws directly into wall studs whenever possible. If studs are unavailable, use toggle bolts or concrete/drywall anchors rated for ≥ 25 kg.
@@ -92,16 +87,12 @@ A reinforcing **gusset blends** the socket smoothly into the box-section arm, an
 
 7. **Attach table top** — Set the table top on the arm flange (holes aligned). Insert 4 × M4 × 20 mm screws from below through the arm into the table; captured M4 hex nuts in the arm nut traps resist rotation.
 
-8. **Install support leg** — Screw the leg bracket to the arm underside with 2 × M4 screws. Thread one M4 × 25 mm bolt through the bracket ears and support leg hinge hole. Use the second M4 bolt through the stop hole to limit the leg to 90°.
-
-9. **Attach a rubber foot** (optional) — Glue a 14 mm adhesive rubber foot into the recess at the tip of the support leg.
-
 ---
 
 ## Usage
 
-- **Deploy**: Swing the table 90° out from the wall until the support leg rests on the floor.
-- **Store**: Fold the support leg up, then swing the table back flush with the wall.
+- **Deploy**: Swing the table 90° out from the wall.
+- **Store**: Swing the table back flush with the wall.
 - **Adjust friction** at any time by tightening/loosening the M8 lock nut.
 - **Weight rating**: designed for 5+ lbs (≈ 2.3 kg) continuous load at centre of table. Increase load rating by increasing infill on wall_bracket and swivel_arm.
 
@@ -139,8 +130,6 @@ xvfb-run openscad -o assembled.png \
 | `"swivel_arm"` | Swivel arm only |
 | `"table_top"` | Table top only |
 | `"pivot_cap"` | Pivot cap only |
-| `"support_leg"` | Support leg only |
-| `"leg_bracket"` | Leg bracket only |
 | `"plate1"` | Print plate 1 layout |
 | `"plate2"` | Print plate 2 layout |
 | `"plate3"` | Print plate 3 layout |
@@ -151,13 +140,12 @@ xvfb-run openscad -o assembled.png \
 
 | Category | Item | Source |
 |:---------|:-----|:-------|
-| Printed parts | 6 parts as listed above | Print yourself |
+| Printed parts | 4 parts as listed above | Print yourself |
 | Pivot bolt | M8 × 110 mm bolt (gr. 8.8) | Hardware store |
 | Pivot nut | M8 Nyloc nut | Hardware store |
 | Washers | M8 flat washer × 2 | Hardware store |
 | Wall screws | M5 × 50 mm + anchors × 4 | Hardware store |
 | Table screws | M4 × 20 mm + M4 nut × 4 | Hardware store |
-| Leg hardware | M4 × 25 mm bolt + nut × 2 | Hardware store |
 
-**Estimated print time**: ~12 hours total across 3 plates  
-**Estimated material**: ~200–220 g PETG / PLA+
+**Estimated print time**: ~8 hours total across 3 plates  
+**Estimated material**: ~150–170 g PETG / PLA+
