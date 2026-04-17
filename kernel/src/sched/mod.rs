@@ -95,6 +95,7 @@ pub struct CpuLocal {
     pub idle: Mutex<Option<Arc<Thread>>>,
     pub online: AtomicBool,
     pub ran_threads: AtomicU64,
+    pub timer_irqs: AtomicU64,
 }
 
 static CPUS: Mutex<Vec<Arc<CpuLocal>>> = Mutex::new(Vec::new());
@@ -108,6 +109,7 @@ pub fn register_cpu(lapic_id: u32) -> usize {
         idle: Mutex::new(None),
         online: AtomicBool::new(false),
         ran_threads: AtomicU64::new(0),
+        timer_irqs: AtomicU64::new(0),
     }));
     idx
 }
@@ -247,6 +249,7 @@ pub fn sleep_ticks(ticks: u64) {
 
 /// Called from the LAPIC timer IRQ handler. CPU has already disabled IRQs.
 pub fn timer_tick() {
+    this_cpu().timer_irqs.fetch_add(1, Ordering::Relaxed);
     sched_lock();
     if this_cpu_idx() == 0 {
         let t = TICKS.fetch_add(1, Ordering::Relaxed) + 1;
@@ -403,7 +406,7 @@ pub fn list_threads() -> Vec<(u64, String, ThreadState, u64)> {
         .collect()
 }
 
-pub fn cpu_ran_counts() -> Vec<(u32, u64, bool)> {
+pub fn cpu_ran_counts() -> Vec<(u32, u64, bool, u64)> {
     CPUS.lock()
         .iter()
         .map(|c| {
@@ -411,6 +414,7 @@ pub fn cpu_ran_counts() -> Vec<(u32, u64, bool)> {
                 c.lapic_id,
                 c.ran_threads.load(Ordering::Relaxed),
                 c.online.load(Ordering::Relaxed),
+                c.timer_irqs.load(Ordering::Relaxed),
             )
         })
         .collect()

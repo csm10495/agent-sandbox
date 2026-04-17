@@ -117,10 +117,7 @@ fn dispatch(args: &[String]) {
         "help" => cmd_help(),
         "echo" => cmd_echo(rest),
         "clear" | "cls" => {
-            // ANSI clear on serial + framebuffer clear.
             print!("\x1b[2J\x1b[H");
-            // Also wipe framebuffer by printing a bunch of newlines so scroll
-            // effectively resets visible area.
         }
         "ls" => cmd_ls(rest),
         "cat" => cmd_cat(rest),
@@ -137,6 +134,7 @@ fn dispatch(args: &[String]) {
         "spawn" => cmd_spawn(rest),
         "sleep" => cmd_sleep(rest),
         "uname" => cmd_uname(),
+        "threadtest" => cmd_threadtest(rest),
         "shutdown" | "poweroff" | "exit" => {
             SHUTDOWN_REQUESTED.store(true, Ordering::SeqCst);
         }
@@ -166,6 +164,7 @@ fn cmd_help() {
     println!("  uptime          Show scheduler ticks.");
     println!("  spawn N         Spawn N counter threads (for demo).");
     println!("  sleep N         Sleep N ticks.");
+    println!("  threadtest N K  Run N threads, each doing K increments; verify result.");
     println!("  uname           Print OS name and version.");
     println!("  shutdown        Halt the system.");
     println!("  reboot          Reboot the system.");
@@ -310,10 +309,10 @@ fn cmd_cpus() {
         rows.len(),
         rows.iter().filter(|r| r.2).count()
     );
-    for (i, (lapic_id, ran, online)) in rows.iter().enumerate() {
+    for (i, (lapic_id, ran, online, irqs)) in rows.iter().enumerate() {
         println!(
-            "  cpu{}: lapic_id={} online={} scheduled_runs={}",
-            i, lapic_id, online, ran
+            "  cpu{}: lapic_id={} online={} scheduled_runs={} timer_irqs={}",
+            i, lapic_id, online, ran, irqs
         );
     }
 }
@@ -354,4 +353,74 @@ fn cmd_sleep(args: &[String]) {
 
 fn cmd_uname() {
     println!("SandboxOS 0.1.0 x86_64 (SMP)");
+}
+
+/// `threadtest N K` — spawn N worker threads that each increment a shared
+/// atomic counter K times. Wait for all workers to finish. Print a verifiable
+/// result line that the functional test can assert against.
+///
+/// This really exercises:
+///   - thread spawning + joining (via an atomic "done" count)
+///   - shared-memory coherence across CPUs (all increments must be visible)
+///   - scheduler preemption (the main thread yields while workers run)
+fn cmd_threadtest(args: &[String]) {
+    use alloc::sync::Arc;
+    use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+
+    let n: usize = args.first().and_then(|s| s.parse().ok()).unwrap_or(4);
+    let k: u64 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(10_000);
+    let expected = (n as u64) * k;
+
+    let counter = Arc::new(AtomicU64::new(0));
+    let done = Arc::new(AtomicUsize::new(0));
+    // Track which CPUs observed the work (via LAPIC ID).
+    let cpu_mask = Arc::new(AtomicU64::new(0));
+
+    for i in 0..n {
+        let c = counter.clone();
+        let d = done.clone();
+        let m = cpu_mask.clone();
+        let name = format!("tt-{}", i);
+        crate::sched::spawn(&name, move || {
+            for _ in 0..k {
+                c.fetch_add(1, Ordering::Relaxed);
+                // Record the CPU we observed ourselves on.
+                let id = crate::arch::x86_64::lapic::id();
+                if id < 64 {
+                    m.fetch_or(1u64 << id, Ordering::Relaxed);
+                }
+                // Occasionally yield so other workers + preemption run.
+                if (c.load(Ordering::Relaxed) & 0xFF) == 0 {
+                    crate::sched::yield_now();
+                }
+            }
+            d.fetch_add(1, Ordering::Relaxed);
+        });
+    }
+
+    // Wait (with a generous bound) for all workers to finish.
+    let deadline_ticks = crate::sched::total_ticks() + 2000;
+    while done.load(Ordering::Relaxed) < n {
+        crate::sched::sleep_ticks(2);
+        if crate::sched::total_ticks() > deadline_ticks {
+            break;
+        }
+    }
+
+    let got = counter.load(Ordering::Relaxed);
+    let finished = done.load(Ordering::Relaxed);
+    let mask = cpu_mask.load(Ordering::Relaxed);
+    let cpus_observed = mask.count_ones();
+    let ok = got == expected && finished == n;
+    println!(
+        "THREADTEST {} workers={} k={} expected={} got={} finished={} cpus_observed={} mask={:#x}",
+        if ok { "PASS" } else { "FAIL" },
+        n,
+        k,
+        expected,
+        got,
+        finished,
+        cpus_observed,
+        mask
+    );
 }
