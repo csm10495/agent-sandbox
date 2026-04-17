@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = ["kernel", "shared", "xtask"]
+default-members = ["shared", "xtask"]
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+opt-level = 3
+debug = false
+
+[profile.dev]
+panic = "abort"
+opt-level = 1
+debug = true

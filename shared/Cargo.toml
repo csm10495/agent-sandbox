@@ -1,0 +1,16 @@
+[package]
+name = "shared"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Pure-logic modules shared between host tests and the SandboxOS kernel."
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = []
+# With `std`, the crate uses std-backed containers so host unit tests can run.
+std = []
+
+[dependencies]

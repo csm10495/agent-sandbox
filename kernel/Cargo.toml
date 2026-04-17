@@ -1,0 +1,22 @@
+[package]
+name = "kernel"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[[bin]]
+name = "kernel"
+path = "src/main.rs"
+
+[dependencies]
+shared = { path = "../shared" }
+limine = "0.5"
+spin = { version = "0.9", default-features = false, features = ["spin_mutex", "rwlock"] }
+linked_list_allocator = "0.10"
+x86_64 = "0.15"
+uart_16550 = "0.3"
+bitflags = "2"
+
+[package.metadata.bootimage]
+# Custom marker – used by xtask
+name = "sandbox-kernel"
