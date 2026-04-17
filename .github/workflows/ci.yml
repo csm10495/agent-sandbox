@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xorriso qemu-system-x86 nasm mtools
+
+      - name: Rust toolchain
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Host unit tests (shared crate)
+        run: cargo test -p shared --target x86_64-unknown-linux-gnu
+
+      - name: Build ISO
+        run: cargo run -p xtask -- iso
+
+      - name: QEMU functional test
+        run: cargo run -p xtask -- test
+
+      - name: Upload ISO artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sandboxos-iso
+          path: target/sandboxos.iso
+          if-no-files-found: ignore

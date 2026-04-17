@@ -61,7 +61,7 @@ fn readline(buf: &mut String) -> &str {
                     print!("\u{0008} \u{0008}");
                 }
             }
-            c if c.is_ascii() && !(c as u32) < 0x20 => {
+            c if c.is_ascii() && (c as u32) >= 0x20 => {
                 buf.push(c);
                 let mut s = [0u8; 4];
                 print!("{}", c.encode_utf8(&mut s));

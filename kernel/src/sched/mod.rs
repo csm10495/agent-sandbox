@@ -1,22 +1,17 @@
 //! Preemptive round-robin scheduler with native kernel threads.
 //!
-//! A single global run queue is protected by a spinlock. Every CPU has its own
-//! idle thread and its own "current thread" pointer. The LAPIC timer fires on
-//! every CPU; on each tick we try to pull a runnable thread from the global
-//! queue and switch to it. When a thread exits or yields, it goes back to the
-//! queue (or is dropped, in the case of exit).
-//!
-//! This is deliberately the simplest correct multi-core scheduler: one global
-//! queue + per-CPU idle threads. It's demonstrably SMP because multiple CPUs
-//! pull from the same queue concurrently (with the lock serializing access).
+//! Design: single global run queue protected by a raw atomic spinlock
+//! [`SCHED_LOCK`]. The lock is held across context switches — the incoming
+//! thread releases the lock on the other side of [`switch_context`]. This
+//! avoids a race where an "old" thread would otherwise be published on the
+//! run queue with a stale RSP before `switch_context` finishes saving it.
 
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
-use alloc::string::String;
-use alloc::string::ToString;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use spin::Mutex;
 
@@ -40,20 +35,16 @@ pub struct Thread {
     pub state: Mutex<ThreadState>,
     pub stack_base: *mut u8,
     pub stack_size: usize,
-    /// Monotonic tick at which a sleeping thread should be woken.
     pub wake_tick: AtomicU64,
     pub cpu_ticks: AtomicU64,
     pub is_idle: bool,
 }
 
-// Safety: Thread is shared across CPUs; all fields are atomic/locked or
-// point to owned heap storage that is never freed while live.
 unsafe impl Send for Thread {}
 unsafe impl Sync for Thread {}
 
 impl Drop for Thread {
     fn drop(&mut self) {
-        // Free the stack we allocated on spawn.
         if !self.stack_base.is_null() {
             unsafe {
                 let layout = core::alloc::Layout::from_size_align(self.stack_size, 16).unwrap();
@@ -66,16 +57,38 @@ impl Drop for Thread {
 static NEXT_TID: AtomicU64 = AtomicU64::new(1);
 static TICKS: AtomicU64 = AtomicU64::new(0);
 
-/// Global run queue of runnable threads.
+// State protected conceptually by SCHED_LOCK. The inner `Mutex`es are cheap
+// and uncontended since SCHED_LOCK already serializes all access, but keeping
+// them gives us safe `&mut` without more unsafe.
 static RUN_QUEUE: Mutex<VecDeque<Arc<Thread>>> = Mutex::new(VecDeque::new());
-
-/// Sleeping threads, to be polled each tick.
 static SLEEP_LIST: Mutex<Vec<Arc<Thread>>> = Mutex::new(Vec::new());
-
-/// All live threads (for introspection via `ps`).
 static ALL_THREADS: Mutex<Vec<Arc<Thread>>> = Mutex::new(Vec::new());
 
-/// Per-CPU state. Indexed by CPU index (0..NUM_CPUS).
+/// Raw spinlock: `true` = held.
+static SCHED_LOCK: AtomicBool = AtomicBool::new(false);
+
+fn sched_lock() {
+    while SCHED_LOCK
+        .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+        .is_err()
+    {
+        while SCHED_LOCK.load(Ordering::Relaxed) {
+            core::hint::spin_loop();
+        }
+    }
+}
+
+fn sched_unlock() {
+    SCHED_LOCK.store(false, Ordering::Release);
+}
+
+/// Called by [`thread_trampoline`] (asm) before a freshly-created thread runs
+/// user code. Releases the lock the creator-side `schedule` did not drop.
+#[no_mangle]
+pub extern "C" fn sched_post_switch_unlock() {
+    sched_unlock();
+}
+
 pub struct CpuLocal {
     pub lapic_id: u32,
     pub current: Mutex<Option<Arc<Thread>>>,
@@ -118,8 +131,6 @@ fn this_cpu_idx() -> usize {
             return i;
         }
     }
-    // If we haven't registered this CPU yet, return 0; in practice registration
-    // happens before any scheduling runs.
     0
 }
 
@@ -132,47 +143,19 @@ pub fn total_ticks() -> u64 {
     TICKS.load(Ordering::Relaxed)
 }
 
-/// Create and enqueue a new kernel thread.
 pub fn spawn<F>(name: &str, entry: F) -> u64
 where
     F: FnOnce() + Send + 'static,
 {
-    // Box the closure into a heap-allocated, erased callable.
     let boxed: Box<dyn FnOnce() + Send> = Box::new(entry);
-    let boxed_ptr: *mut Box<dyn FnOnce() + Send> =
-        Box::into_raw(Box::new(boxed));
+    let boxed_ptr: *mut Box<dyn FnOnce() + Send> = Box::into_raw(Box::new(boxed));
 
     let stack_size = DEFAULT_STACK_SIZE;
     let layout = core::alloc::Layout::from_size_align(stack_size, 16).unwrap();
     let stack_base = unsafe { alloc::alloc::alloc_zeroed(layout) };
     assert!(!stack_base.is_null(), "spawn: out of memory for thread stack");
 
-    // Set up initial stack so that `switch_context` will return into
-    // `thread_trampoline` with r12=entry-fn-ptr, r13=arg.
-    let stack_top = unsafe { stack_base.add(stack_size) };
-    // Align down to 16, then reserve 8 bytes so that after `ret` the stack is
-    // 16-byte aligned at the first instruction of the trampoline (System V).
-    let mut sp = ((stack_top as usize) & !0xF) as *mut u64;
-    unsafe {
-        // Stack order from top to bottom (pushed by ctx switch in reverse):
-        //   [sp+56] return address  -> thread_trampoline
-        //   [sp+48] rflags           -> 0x202 (IF=1, reserved bit)
-        //   [sp+40] rbx              -> 0
-        //   [sp+32] rbp              -> 0
-        //   [sp+24] r12              -> thread_entry_shim  (receives closure ptr in rdi)
-        //   [sp+16] r13              -> closure ptr
-        //   [sp+8 ] r14              -> 0
-        //   [sp+0 ] r15              -> 0
-        sp = sp.sub(8);
-        *sp.add(7) = crate::arch::x86_64::context::thread_trampoline as u64;
-        *sp.add(6) = 0x202;
-        *sp.add(5) = 0; // rbx
-        *sp.add(4) = 0; // rbp
-        *sp.add(3) = thread_entry_shim as u64; // r12
-        *sp.add(2) = boxed_ptr as u64; // r13
-        *sp.add(1) = 0; // r14
-        *sp.add(0) = 0; // r15
-    }
+    let sp = build_initial_stack(stack_base, stack_size, boxed_ptr);
 
     let tid = NEXT_TID.fetch_add(1, Ordering::Relaxed);
     let thread = Arc::new(Thread {
@@ -187,52 +170,69 @@ where
         is_idle: false,
     });
 
+    let _irq = IrqGuard::new();
+    sched_lock();
     ALL_THREADS.lock().push(thread.clone());
     RUN_QUEUE.lock().push_back(thread);
+    sched_unlock();
     tid
 }
 
-/// Trampoline-called shim: `rdi = *mut Box<dyn FnOnce()+Send>`.
-///
-/// SAFETY: called exactly once per thread, with a valid pointer produced by
-/// `Box::into_raw`.
+fn build_initial_stack(
+    stack_base: *mut u8,
+    stack_size: usize,
+    arg: *mut Box<dyn FnOnce() + Send>,
+) -> *mut u64 {
+    let stack_top = unsafe { stack_base.add(stack_size) };
+    let mut sp = ((stack_top as usize) & !0xF) as *mut u64;
+    unsafe {
+        sp = sp.sub(8);
+        //  low address -- high address
+        //   r15=0  r14=0  r13=arg  r12=shim  rbp=0  rbx=0  rflags=0x202  ret=trampoline
+        *sp.add(7) = crate::arch::x86_64::context::thread_trampoline as u64;
+        *sp.add(6) = 0x202;
+        *sp.add(5) = 0;
+        *sp.add(4) = 0;
+        *sp.add(3) = thread_entry_shim as u64;
+        *sp.add(2) = arg as u64;
+        *sp.add(1) = 0;
+        *sp.add(0) = 0;
+    }
+    sp
+}
+
 extern "C" fn thread_entry_shim(arg: *mut Box<dyn FnOnce() + Send>) {
-    // Thread starts with interrupts enabled (popf set IF=1 for us), so the
-    // LAPIC timer can preempt us.
+    // SAFETY: built by `spawn`/`spawn_idle` via `Box::into_raw`.
     let boxed: Box<Box<dyn FnOnce() + Send>> = unsafe { Box::from_raw(arg) };
     let f: Box<dyn FnOnce() + Send> = *boxed;
     f();
 }
 
-/// Called by a thread when it voluntarily wants to exit.
 #[no_mangle]
 pub extern "C" fn thread_exit() -> ! {
-    // Mark current thread as exited, then yield. The scheduler will not put it
-    // back into the run queue.
-    {
-        let _guard = IrqGuard::new();
-        let cur = this_cpu().current.lock().clone();
-        if let Some(t) = cur {
-            *t.state.lock() = ThreadState::Exited;
-        }
+    context::disable_interrupts();
+    sched_lock();
+    let cur = this_cpu().current.lock().clone();
+    if let Some(t) = cur {
+        *t.state.lock() = ThreadState::Exited;
     }
-    // Yield forever. After we switch away, we will not come back because we're
-    // exited. Just spin (unreachable).
+    schedule_locked_and_unlock();
+    // Unreachable: exited threads are never scheduled again.
     loop {
-        yield_now();
+        core::hint::spin_loop();
     }
 }
 
-/// Voluntarily yield the CPU.
 pub fn yield_now() {
-    let _guard = IrqGuard::new();
-    schedule();
+    let _irq = IrqGuard::new();
+    sched_lock();
+    schedule_locked_and_unlock();
 }
 
-/// Sleep for `ticks` scheduler ticks.
 pub fn sleep_ticks(ticks: u64) {
     {
-        let _guard = IrqGuard::new();
+        let _irq = IrqGuard::new();
+        sched_lock();
         let cpu = this_cpu();
         let cur = cpu.current.lock().clone();
         if let Some(t) = cur {
@@ -241,90 +241,82 @@ pub fn sleep_ticks(ticks: u64) {
             *t.state.lock() = ThreadState::Sleeping;
             SLEEP_LIST.lock().push(t);
         }
+        schedule_locked_and_unlock();
     }
-    yield_now();
 }
 
-/// Called from the LAPIC timer IRQ handler.
+/// Called from the LAPIC timer IRQ handler. CPU has already disabled IRQs.
 pub fn timer_tick() {
-    // Only CPU 0 increments the global tick counter; that way "uptime" is
-    // monotonic and SMP-consistent.
+    sched_lock();
     if this_cpu_idx() == 0 {
         let t = TICKS.fetch_add(1, Ordering::Relaxed) + 1;
-        // Wake any sleeping threads.
-        let mut woken: Vec<Arc<Thread>> = Vec::new();
-        {
-            let mut list = SLEEP_LIST.lock();
-            let mut i = 0;
-            while i < list.len() {
-                if list[i].wake_tick.load(Ordering::Relaxed) <= t {
-                    let th = list.swap_remove(i);
-                    *th.state.lock() = ThreadState::Runnable;
-                    woken.push(th);
-                } else {
-                    i += 1;
-                }
-            }
-        }
-        if !woken.is_empty() {
-            let mut q = RUN_QUEUE.lock();
-            for th in woken {
-                q.push_back(th);
+        let mut list = SLEEP_LIST.lock();
+        let mut i = 0;
+        while i < list.len() {
+            if list[i].wake_tick.load(Ordering::Relaxed) <= t {
+                let th = list.swap_remove(i);
+                *th.state.lock() = ThreadState::Runnable;
+                RUN_QUEUE.lock().push_back(th);
+            } else {
+                i += 1;
             }
         }
     }
-    // Re-enter the scheduler to pick next thread.
-    schedule();
+    schedule_locked_and_unlock();
 }
 
-/// Core scheduling routine. Must be called with interrupts disabled.
-fn schedule() {
+/// Precondition: SCHED_LOCK is held; interrupts are disabled.
+/// Postcondition: SCHED_LOCK released (by this or a future CPU).
+fn schedule_locked_and_unlock() {
     let cpu = this_cpu();
 
-    // Pull next runnable thread (may be None).
     let mut next = RUN_QUEUE.lock().pop_front();
-
-    // Inspect / update old thread state.
     let old = cpu.current.lock().clone();
+
     if let Some(ref old) = old {
-        let mut st = old.state.lock();
-        match *st {
+        let st = *old.state.lock();
+        match st {
             ThreadState::Running => {
                 if next.is_none() && !old.is_idle {
-                    // No candidate; keep running the same thread.
+                    // Keep running same non-idle thread.
+                    sched_unlock();
                     return;
                 }
-                if old.is_idle {
-                    // Never enqueue the idle thread.
-                    *st = ThreadState::Runnable;
-                } else {
-                    *st = ThreadState::Runnable;
-                    drop(st);
+                *old.state.lock() = ThreadState::Runnable;
+                if !old.is_idle {
+                    // Safe to enqueue now: SCHED_LOCK prevents any other CPU
+                    // from popping and consuming our stale RSP. The RSP will
+                    // be fixed up by switch_context below, which completes
+                    // BEFORE we release the lock (the incoming thread does).
                     RUN_QUEUE.lock().push_back(old.clone());
                 }
             }
-            ThreadState::Sleeping | ThreadState::Exited => {
-                // Already moved elsewhere; leave as-is.
-            }
+            ThreadState::Sleeping | ThreadState::Exited => {}
             ThreadState::Runnable => {
-                // Unusual: old was runnable but not on queue. Put it back.
                 if !old.is_idle {
-                    drop(st);
                     RUN_QUEUE.lock().push_back(old.clone());
                 }
             }
         }
     }
 
-    // If still nothing to run, fall back to idle.
     if next.is_none() {
         if let Some(idle) = cpu.idle.lock().clone() {
             next = Some(idle);
         } else {
-            return; // nothing we can do
+            sched_unlock();
+            return;
         }
     }
     let next = next.unwrap();
+
+    if let Some(ref old) = old {
+        if Arc::ptr_eq(old, &next) {
+            *next.state.lock() = ThreadState::Running;
+            sched_unlock();
+            return;
+        }
+    }
 
     *next.state.lock() = ThreadState::Running;
     next.cpu_ticks.fetch_add(1, Ordering::Relaxed);
@@ -336,17 +328,23 @@ fn schedule() {
     match old {
         Some(old) => {
             let old_rsp_ptr = old.rsp.as_ptr() as *mut u64;
+            // Lock is handed off: incoming thread releases.
             unsafe {
                 context::switch_context(old_rsp_ptr, new_rsp);
             }
+            // We've resumed. Whichever thread switched TO us held the lock;
+            // we release it now.
+            sched_unlock();
         }
         None => unsafe {
+            // First-ever schedule on this CPU; no context to save.
+            // The incoming thread will release the lock via
+            // sched_post_switch_unlock in the trampoline.
             context::load_initial_context(new_rsp);
         },
     }
 }
 
-/// Create an idle thread bound to a specific CPU. Not placed on the run queue.
 fn spawn_idle() -> Arc<Thread> {
     let boxed: Box<dyn FnOnce() + Send> = Box::new(|| loop {
         crate::arch::x86_64::idle_once();
@@ -358,19 +356,7 @@ fn spawn_idle() -> Arc<Thread> {
     let stack_base = unsafe { alloc::alloc::alloc_zeroed(layout) };
     assert!(!stack_base.is_null());
 
-    let stack_top = unsafe { stack_base.add(stack_size) };
-    let mut sp = ((stack_top as usize) & !0xF) as *mut u64;
-    unsafe {
-        sp = sp.sub(8);
-        *sp.add(7) = crate::arch::x86_64::context::thread_trampoline as u64;
-        *sp.add(6) = 0x202;
-        *sp.add(5) = 0;
-        *sp.add(4) = 0;
-        *sp.add(3) = thread_entry_shim as u64;
-        *sp.add(2) = boxed_ptr as u64;
-        *sp.add(1) = 0;
-        *sp.add(0) = 0;
-    }
+    let sp = build_initial_stack(stack_base, stack_size, boxed_ptr);
 
     let tid = NEXT_TID.fetch_add(1, Ordering::Relaxed);
     Arc::new(Thread {
@@ -386,8 +372,7 @@ fn spawn_idle() -> Arc<Thread> {
     })
 }
 
-/// Enter the scheduler for the first time on the current CPU. Creates an idle
-/// thread for this CPU and then drives the scheduler forever.
+/// Enter the scheduler for the first time on the current CPU.
 pub fn enter(cpu_idx: usize) -> ! {
     let idle = spawn_idle();
     {
@@ -395,20 +380,15 @@ pub fn enter(cpu_idx: usize) -> ! {
         *cpus[cpu_idx].idle.lock() = Some(idle);
         cpus[cpu_idx].online.store(true, Ordering::Relaxed);
     }
+    context::disable_interrupts();
+    sched_lock();
+    schedule_locked_and_unlock();
     loop {
-        {
-            let _guard = IrqGuard::new();
-            schedule();
-        }
-        // Unreachable once we have scheduled into any thread (even idle) —
-        // this halt is a safety net before the first schedule.
         crate::arch::x86_64::idle_once();
     }
 }
 
-/// Snapshot thread info for `ps`.
 pub fn list_threads() -> Vec<(u64, String, ThreadState, u64)> {
-    // Prune exited ones lazily.
     let mut all = ALL_THREADS.lock();
     all.retain(|t| *t.state.lock() != ThreadState::Exited);
     all.iter()
@@ -435,7 +415,3 @@ pub fn cpu_ran_counts() -> Vec<(u32, u64, bool)> {
         })
         .collect()
 }
-
-// Silence unused-import warning when features differ.
-#[allow(dead_code)]
-fn _touch(_: AtomicU32, _: AtomicUsize) {}

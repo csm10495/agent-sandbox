@@ -63,12 +63,14 @@ load_initial_context:
     .global thread_trampoline
     .type thread_trampoline,@function
 thread_trampoline:
+    # First order of business: release the scheduler lock that the creating
+    # thread's schedule() left held across switch_context.
+    call sched_post_switch_unlock
     # r12 = entry fn, r13 = arg
     mov rdi, r13
     call r12
     # If the entry returns, fall through to thread_exit.
     call thread_exit
-    # Should never return; halt if it does.
 1:
     hlt
     jmp 1b
