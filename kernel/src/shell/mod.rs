@@ -3,6 +3,7 @@
 
 use alloc::format;
 use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use shared::shell::tokenize;
@@ -29,39 +30,125 @@ pub fn is_reboot_requested() -> bool {
     REBOOT_REQUESTED.load(Ordering::Relaxed)
 }
 
-/// Read a char (non-blocking) from either serial or PS/2 keyboard.
-fn poll_input_char() -> Option<char> {
-    if let Some(b) = serial::try_read_byte() {
-        return Some(b as char);
-    }
-    keyboard::try_read_char()
+/// Input events returned by the input poller.
+#[derive(Clone, Copy, PartialEq)]
+enum InputEvent {
+    Char(char),
+    ArrowUp,
+    ArrowDown,
 }
 
-/// Blocking readline — returns completed line (without the trailing '\n').
-/// Echoes characters as they are typed. Supports simple backspace editing.
-fn readline(buf: &mut String) -> &str {
+/// Serial ANSI-escape state machine for detecting arrow keys.
+static mut SERIAL_ESC_STATE: u8 = 0; // 0=normal, 1=got ESC, 2=got ESC[
+
+/// Read an input event (non-blocking) from serial or PS/2 keyboard.
+fn poll_input_event() -> Option<InputEvent> {
+    // --- serial with ANSI escape sequence parsing ---
+    if let Some(b) = serial::try_read_byte() {
+        unsafe {
+            match SERIAL_ESC_STATE {
+                0 => {
+                    if b == 0x1b {
+                        SERIAL_ESC_STATE = 1;
+                        return None;
+                    }
+                    return Some(InputEvent::Char(b as char));
+                }
+                1 => {
+                    if b == b'[' {
+                        SERIAL_ESC_STATE = 2;
+                        return None;
+                    }
+                    SERIAL_ESC_STATE = 0;
+                    return Some(InputEvent::Char(b as char));
+                }
+                2 => {
+                    SERIAL_ESC_STATE = 0;
+                    return match b {
+                        b'A' => Some(InputEvent::ArrowUp),
+                        b'B' => Some(InputEvent::ArrowDown),
+                        _ => None,
+                    };
+                }
+                _ => { SERIAL_ESC_STATE = 0; }
+            }
+        }
+    }
+    // --- PS/2 keyboard (uses sentinel chars from the keyboard driver) ---
+    if let Some(ch) = keyboard::try_read_char() {
+        return match ch {
+            '\x11' => Some(InputEvent::ArrowUp),
+            '\x12' => Some(InputEvent::ArrowDown),
+            _ => Some(InputEvent::Char(ch)),
+        };
+    }
+    None
+}
+
+/// Erase the current line content from the screen, replace it with `new`,
+/// and update `buf` to match.
+fn replace_line(buf: &mut String, new: &str) {
+    // Move cursor back and clear to end-of-line.
+    for _ in 0..buf.len() {
+        print!("\u{0008}");
+    }
+    // Overwrite with spaces then move back again (for terminals without EL).
+    for _ in 0..buf.len() {
+        print!(" ");
+    }
+    for _ in 0..buf.len() {
+        print!("\u{0008}");
+    }
     buf.clear();
+    buf.push_str(new);
+    print!("{}", buf);
+}
+
+/// Blocking readline with command history (up/down arrows).
+fn readline<'a>(buf: &'a mut String, history: &[String]) -> &'a str {
+    buf.clear();
+    // Index into history: history.len() means "current (new) line".
+    let mut hist_idx = history.len();
+    // Stash the in-progress line when the user starts browsing history.
+    let mut saved_line = String::new();
     loop {
-        // Yield while waiting for input so other threads run.
-        let ch = loop {
-            if let Some(c) = poll_input_char() {
-                break c;
+        let ev = loop {
+            if let Some(e) = poll_input_event() {
+                break e;
             }
             crate::sched::yield_now();
         };
-        match ch {
-            '\n' | '\r' => {
+        match ev {
+            InputEvent::Char('\n') | InputEvent::Char('\r') => {
                 println!();
                 return buf.as_str();
             }
-            '\u{0008}' | '\u{007F}' => {
-                // Backspace / DEL
+            InputEvent::Char('\u{0008}') | InputEvent::Char('\u{007F}') => {
                 if buf.pop().is_some() {
-                    // Erase the character on screen: write BS, space, BS.
                     print!("\u{0008} \u{0008}");
                 }
             }
-            c if c.is_ascii() && (c as u32) >= 0x20 => {
+            InputEvent::ArrowUp => {
+                if hist_idx > 0 {
+                    if hist_idx == history.len() {
+                        saved_line = buf.clone();
+                    }
+                    hist_idx -= 1;
+                    replace_line(buf, &history[hist_idx]);
+                }
+            }
+            InputEvent::ArrowDown => {
+                if hist_idx < history.len() {
+                    hist_idx += 1;
+                    if hist_idx == history.len() {
+                        let s = saved_line.clone();
+                        replace_line(buf, &s);
+                    } else {
+                        replace_line(buf, &history[hist_idx]);
+                    }
+                }
+            }
+            InputEvent::Char(c) if c.is_ascii() && (c as u32) >= 0x20 => {
                 buf.push(c);
                 let mut s = [0u8; 4];
                 print!("{}", c.encode_utf8(&mut s));
@@ -86,6 +173,7 @@ pub fn run() {
     println!("Type '\x1b[1;33mhelp\x1b[0m' for a list of commands.\n");
 
     let mut line = String::new();
+    let mut history: Vec<String> = Vec::new();
     loop {
         if SHUTDOWN_REQUESTED.load(Ordering::Relaxed)
             || REBOOT_REQUESTED.load(Ordering::Relaxed)
@@ -95,10 +183,11 @@ pub fn run() {
         }
         let cwd = fs::cwd();
         print!("{} $ ", cwd);
-        let raw = readline(&mut line).to_string();
+        let raw = readline(&mut line, &history).to_string();
         if raw.is_empty() {
             continue;
         }
+        history.push(raw.clone());
         let tokens = match tokenize(&raw) {
             Ok(t) => t,
             Err(e) => {
@@ -109,13 +198,44 @@ pub fn run() {
         if tokens.is_empty() {
             continue;
         }
-        dispatch(&tokens);
+
+        // Split tokens on "|" for pipe support.
+        let mut segments: Vec<&[String]> = Vec::new();
+        let mut start = 0;
+        for (i, t) in tokens.iter().enumerate() {
+            if t == "|" {
+                segments.push(&tokens[start..i]);
+                start = i + 1;
+            }
+        }
+        segments.push(&tokens[start..]);
+
+        if segments.iter().any(|s| s.is_empty()) {
+            println!("parse error: empty pipe segment");
+            continue;
+        }
+
+        if segments.len() == 1 {
+            dispatch(&tokens, None, None);
+        } else {
+            let mut pipe_buf: Option<Vec<u8>> = None;
+            for (i, seg) in segments.iter().enumerate() {
+                let is_last = i == segments.len() - 1;
+                if is_last {
+                    dispatch(seg, pipe_buf.as_deref(), None);
+                } else {
+                    let mut out = Vec::new();
+                    dispatch(seg, pipe_buf.as_deref(), Some(&mut out));
+                    pipe_buf = Some(out);
+                }
+            }
+        }
     }
 }
 
 fn _unused_exit() {}
 
-fn dispatch(args: &[String]) {
+fn dispatch(args: &[String], pipe_in: Option<&[u8]>, pipe_out: Option<&mut Vec<u8>>) {
     let cmd = args[0].as_str();
     let rest: &[String] = &args[1..];
     match cmd {
@@ -133,6 +253,7 @@ fn dispatch(args: &[String]) {
         "write" => cmd_write(rest),
         "rm" => cmd_rm(rest),
         "mem" => cmd_mem(),
+        "getrambytes" => cmd_getrambytes(),
         "cpus" => cmd_cpus(),
         "ps" => cmd_ps(),
         "uptime" => cmd_uptime(),
@@ -140,6 +261,12 @@ fn dispatch(args: &[String]) {
         "sleep" => cmd_sleep(rest),
         "uname" => cmd_uname(),
         "threadtest" => cmd_threadtest(rest),
+        "readram" => cmd_readram(rest, pipe_out),
+        "writeram" => cmd_writeram(rest, pipe_in),
+        "memsetram" => cmd_memsetram(rest),
+        "findtextram" => cmd_findtextram(rest),
+        "replacetextram" => cmd_replacetextram(rest),
+        "xxd" => cmd_xxd(pipe_in),
         "shutdown" | "poweroff" | "exit" => {
             SHUTDOWN_REQUESTED.store(true, Ordering::SeqCst);
         }
@@ -164,6 +291,7 @@ fn cmd_help() {
     println!("  write FILE ...  Write args (joined by space) into FILE.");
     println!("  rm PATH         Remove a file or empty directory.");
     println!("  mem             Show memory statistics.");
+    println!("  getrambytes     Print total RAM in bytes.");
     println!("  cpus            Show online CPUs.");
     println!("  ps              List threads.");
     println!("  uptime          Show scheduler ticks.");
@@ -171,6 +299,12 @@ fn cmd_help() {
     println!("  sleep N         Sleep N ticks.");
     println!("  threadtest N K  Run N threads, each doing K increments; verify result.");
     println!("  uname           Print OS name and version.");
+    println!("  readram OFF N   Read N bytes at offset OFF (raw output).");
+    println!("  writeram OFF .. Write data at offset OFF.");
+    println!("  memsetram O N V Fill N bytes at offset O with byte value V.");
+    println!("  findtextram TXT Search all RAM for TXT, print matching offsets.");
+    println!("  replacetextram F R  Replace all occurrences of F with R in RAM (same len).");
+    println!("  xxd             Hex-dump piped input (e.g. readram .. | xxd).");
     println!("  shutdown        Halt the system.");
     println!("  reboot          Reboot the system.");
 }
@@ -307,6 +441,14 @@ fn cmd_mem() {
     );
 }
 
+fn cmd_getrambytes() {
+    if let Some((total, _, _)) = crate::mem::pmm::stats() {
+        println!("{}", total * 4096);
+    } else {
+        println!("getrambytes: memory info unavailable");
+    }
+}
+
 fn cmd_cpus() {
     let rows = crate::sched::cpu_ran_counts();
     println!(
@@ -428,4 +570,267 @@ fn cmd_threadtest(args: &[String]) {
         cpus_observed,
         mask
     );
+}
+
+/// Parse a usize from a string. Supports decimal and `0x`/`0X` hex prefix.
+fn parse_usize(s: &str) -> Option<usize> {
+    if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        usize::from_str_radix(hex, 16).ok()
+    } else {
+        s.parse().ok()
+    }
+}
+
+/// Disable CR0.WP (Write Protect) so supervisor can write to read-only pages.
+/// Returns the original CR0 value for later restoration.
+unsafe fn disable_write_protect() -> u64 {
+    let cr0: u64;
+    core::arch::asm!("mov {}, cr0", out(reg) cr0);
+    let new_cr0 = cr0 & !(1u64 << 16); // clear WP bit
+    core::arch::asm!("mov cr0, {}", in(reg) new_cr0);
+    cr0
+}
+
+/// Restore CR0 to a previously saved value.
+unsafe fn restore_write_protect(cr0: u64) {
+    core::arch::asm!("mov cr0, {}", in(reg) cr0);
+}
+
+/// `readram <offset> <num_bytes>` — read raw bytes from physical memory.
+/// Output goes to pipe buffer when piped, otherwise raw bytes to console.
+fn cmd_readram(args: &[String], pipe_out: Option<&mut Vec<u8>>) {
+    if args.len() < 2 {
+        println!("usage: readram <offset> <num_bytes>");
+        return;
+    }
+    let offset = match parse_usize(&args[0]) {
+        Some(v) => v,
+        None => { println!("readram: invalid offset"); return; }
+    };
+    let num_bytes = match parse_usize(&args[1]) {
+        Some(v) => v,
+        None => { println!("readram: invalid length"); return; }
+    };
+
+    let ptr = crate::mem::pmm::phys_to_virt(offset as u64) as *const u8;
+    let slice = unsafe { core::slice::from_raw_parts(ptr, num_bytes) };
+
+    if let Some(buf) = pipe_out {
+        buf.extend_from_slice(slice);
+    } else {
+        for &b in slice {
+            print!("{}", b as char);
+        }
+        println!();
+    }
+}
+
+/// `writeram <offset> <data...>` — write data at a memory offset.
+/// Accepts piped input or space-joined arguments as data.
+fn cmd_writeram(args: &[String], pipe_in: Option<&[u8]>) {
+    if args.is_empty() {
+        println!("usage: writeram <offset> <data...>");
+        println!("       <cmd> | writeram <offset>");
+        return;
+    }
+    let offset = match parse_usize(&args[0]) {
+        Some(v) => v,
+        None => { println!("writeram: invalid offset"); return; }
+    };
+
+    let ptr = crate::mem::pmm::phys_to_virt(offset as u64);
+
+    unsafe {
+        let saved_cr0 = disable_write_protect();
+        if let Some(data) = pipe_in {
+            core::ptr::copy_nonoverlapping(data.as_ptr(), ptr, data.len());
+        } else {
+            if args.len() < 2 {
+                restore_write_protect(saved_cr0);
+                println!("usage: writeram <offset> <data...>");
+                return;
+            }
+            let mut content = String::new();
+            for (i, a) in args[1..].iter().enumerate() {
+                if i > 0 { content.push(' '); }
+                content.push_str(a);
+            }
+            let bytes = content.as_bytes();
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len());
+        }
+        restore_write_protect(saved_cr0);
+    }
+}
+
+/// `memsetram <offset> <num_bytes> <value>` — fill memory like C memset.
+fn cmd_memsetram(args: &[String]) {
+    if args.len() < 3 {
+        println!("usage: memsetram <offset> <num_bytes> <value>");
+        return;
+    }
+    let offset = match parse_usize(&args[0]) {
+        Some(v) => v,
+        None => { println!("memsetram: invalid offset"); return; }
+    };
+    let num_bytes = match parse_usize(&args[1]) {
+        Some(v) => v,
+        None => { println!("memsetram: invalid length"); return; }
+    };
+    let value = match parse_usize(&args[2]) {
+        Some(v) if v <= 0xFF => v as u8,
+        _ => { println!("memsetram: invalid byte value (0-255)"); return; }
+    };
+    let ptr = crate::mem::pmm::phys_to_virt(offset as u64);
+    unsafe {
+        let saved_cr0 = disable_write_protect();
+        core::ptr::write_bytes(ptr, value, num_bytes);
+        restore_write_protect(saved_cr0);
+    }
+}
+
+/// `findtextram <text>` — search all of RAM for occurrences of text.
+fn cmd_findtextram(args: &[String]) {
+    if args.is_empty() {
+        println!("usage: findtextram <text>");
+        return;
+    }
+    let needle: Vec<u8> = args.join(" ").into_bytes();
+    if needle.is_empty() {
+        return;
+    }
+
+    let total_bytes = match crate::mem::pmm::stats() {
+        Some((total_frames, _, _)) => total_frames * 4096,
+        None => {
+            println!("findtextram: memory info unavailable");
+            return;
+        }
+    };
+
+    let base = crate::mem::pmm::phys_to_virt(0);
+    let nlen = needle.len();
+
+    let mut i = 0;
+    while i + nlen <= total_bytes {
+        let mut matched = true;
+        for j in 0..nlen {
+            let b = unsafe { core::ptr::read_volatile(base.add(i + j)) };
+            if b != needle[j] {
+                matched = false;
+                break;
+            }
+        }
+        if matched {
+            println!("{:#x}", i);
+        }
+        i += 1;
+    }
+}
+
+/// `replacetextram <find> <replace>` — find and replace text in all of RAM.
+/// Both strings must be the same length.
+fn cmd_replacetextram(args: &[String]) {
+    if args.len() != 2 {
+        println!("usage: replacetextram <find> <replace>");
+        return;
+    }
+    let find_src = args[0].as_bytes();
+    let repl_src = args[1].as_bytes();
+    if find_src.len() != repl_src.len() {
+        println!("replacetextram: find and replace must be the same length ({} vs {})", find_src.len(), repl_src.len());
+        return;
+    }
+    let nlen = find_src.len();
+    if nlen == 0 || nlen > 256 {
+        println!("replacetextram: length must be 1-256");
+        return;
+    }
+
+    // Copy needle and replacement into stack buffers. Use read_volatile
+    // to load from the source so the compiler cannot optimise comparisons
+    // back to the original heap pointers (which the scan will mutate).
+    let mut find_buf = [0u8; 256];
+    let mut repl_buf = [0u8; 256];
+    for i in 0..nlen {
+        find_buf[i] = unsafe { core::ptr::read_volatile(find_src.as_ptr().add(i)) };
+        repl_buf[i] = unsafe { core::ptr::read_volatile(repl_src.as_ptr().add(i)) };
+    }
+    // Prevent the compiler from tracing these buffers back to their source.
+    let find_buf = core::hint::black_box(find_buf);
+    let repl_buf = core::hint::black_box(repl_buf);
+
+    let total_bytes = match crate::mem::pmm::stats() {
+        Some((total_frames, _, _)) => total_frames * 4096,
+        None => {
+            println!("replacetextram: memory info unavailable");
+            return;
+        }
+    };
+
+    let base = crate::mem::pmm::phys_to_virt(0);
+
+    // Single pass: scan + replace with WP disabled.
+    let mut count = 0usize;
+    unsafe {
+        let saved_cr0 = disable_write_protect();
+        let mut i = 0;
+        while i + nlen <= total_bytes {
+            let mut matched = true;
+            for j in 0..nlen {
+                let b = core::ptr::read_volatile(base.add(i + j));
+                let expected = core::ptr::read_volatile(find_buf.as_ptr().add(j));
+                if b != expected {
+                    matched = false;
+                    break;
+                }
+            }
+            if matched {
+                for j in 0..nlen {
+                    let replacement = core::ptr::read_volatile(repl_buf.as_ptr().add(j));
+                    core::ptr::write_volatile(base.add(i + j), replacement);
+                }
+                count += 1;
+                i += nlen;
+            } else {
+                i += 1;
+            }
+        }
+        restore_write_protect(saved_cr0);
+    }
+    println!("{} replacement(s)", count);
+}
+
+/// `xxd` — hex-dump piped input in traditional xxd format.
+fn cmd_xxd(pipe_in: Option<&[u8]>) {
+    let data = match pipe_in {
+        Some(d) => d,
+        None => {
+            println!("usage: <command> | xxd");
+            return;
+        }
+    };
+
+    for (line_idx, chunk) in data.chunks(16).enumerate() {
+        let offset = line_idx * 16;
+        print!("{:08x}: ", offset);
+        for j in 0..16 {
+            if j < chunk.len() {
+                print!("{:02x}", chunk[j]);
+            } else {
+                print!("  ");
+            }
+            if j % 2 == 1 {
+                print!(" ");
+            }
+        }
+        print!(" ");
+        for &b in chunk {
+            if b >= 0x20 && b <= 0x7e {
+                print!("{}", b as char);
+            } else {
+                print!(".");
+            }
+        }
+        println!();
+    }
 }

@@ -102,9 +102,13 @@ pub fn try_read_char() -> Option<char> {
     if released {
         return None;
     }
-    // Ignore extended prefixed codes (arrows etc.) for now.
+    // Extended arrow keys: Up=0x48, Down=0x50
     if ext {
-        return None;
+        return match make {
+            0x48 => Some('\x11'), // UP   — private sentinel
+            0x50 => Some('\x12'), // DOWN — private sentinel
+            _ => None,
+        };
     }
 
     let shifted = SHIFT.load(Ordering::Relaxed);
