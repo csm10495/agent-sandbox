@@ -3,8 +3,32 @@
 A small but complete **x86_64 operating system written from scratch in Rust**.
 It boots on BIOS and UEFI PCs (including VirtualBox and QEMU), runs on
 multiple CPU cores with a preemptive round-robin scheduler, provides native
-kernel threads, an in-memory hierarchical filesystem, a framebuffer + serial
-console, and a small bash-like interactive shell.
+kernel threads, an in-memory hierarchical filesystem, a pluggable on-screen
+terminal, and a small bash-like interactive shell.
+
+## Screenshots
+
+### Framebuffer console (default)
+
+A 32-bpp pixel framebuffer (Limine) with an 8×16 PSF glyph renderer. Any
+resolution the firmware chooses works (the example below is 1280×800). ANSI
+colors and cursor control are interpreted by the in-kernel terminal
+emulator.
+
+![Framebuffer console](docs/img/framebuffer-console.png)
+
+### VGA 80×25 text-mode console
+
+Same kernel, built with `--features textmode`, booted via a Limine entry
+that makes no framebuffer request. The kernel disables Bochs VBE, programs
+the VGA hardware for BIOS mode 3, re-uploads the font glyphs to plane 2,
+and drives the legacy `0xB8000` text buffer. The screenshot is captured at
+the native 720×400 text-mode resolution.
+
+![VGA text-mode console](docs/img/vga-text-console.png)
+
+Both screenshots were captured automatically by `cargo xtask screenshot`,
+which boots each ISO in headless QEMU and dumps the emulated display.
 
 ## Features
 
@@ -23,7 +47,13 @@ console, and a small bash-like interactive shell.
 - **Interrupts**: full CPU-exception handlers (including `#DF` on its own IST
   stack), LAPIC timer vector, PIC remapped and masked.
 - **Drivers**: 16550 UART (COM1) polled serial; PS/2 keyboard (scan-code set
-  1) polled; 32-bpp framebuffer text console with embedded PSF font.
+  1) polled; 32-bpp framebuffer text console with embedded PSF font; legacy
+  VGA 80×25 color text mode (register programming for BIOS mode 3, font
+  upload to plane 2, VBE disable).
+- **On-screen terminal**: the video console is driven by an in-kernel ANSI
+  parser (`kernel/src/term.rs`) that dispatches to one or more
+  `TerminalSink` backends, so what you see on screen tracks what the serial
+  line sees. Adding a new backend is just an `impl TerminalSink for …`.
 - **Filesystem**: `ramfs` (in-memory hierarchical FS) exposed through a small
   VFS, preloaded with `/etc/motd`, `/etc/version`, `/home/user/README`, etc.
 - **Shell**: bash-like tokenizer (single + double quotes, backslash escapes,
@@ -49,13 +79,15 @@ console, and a small bash-like interactive shell.
 │       ├── arch/x86_64/   GDT, IDT, LAPIC, PIC, serial, keyboard,
 │       │                  context switch, ports
 │       ├── boot.rs        Limine request statics
-│       ├── console.rs     Console routing (serial + framebuffer)
-│       ├── fb.rs          Framebuffer text console with PSF font
+│       ├── console.rs     Console routing (serial + pluggable video terms)
+│       ├── fb.rs          Framebuffer TerminalSink (PSF 8×16 font)
 │       ├── fs/            VFS wrapper around shared::ramfs
 │       ├── mem/           Frame allocator + kernel heap
 │       ├── sched/         Preemptive SMP scheduler
 │       ├── shell/         Interactive shell
 │       ├── smp.rs         AP entry point
+│       ├── term.rs        TerminalSink trait + ANSI/CSI parser
+│       ├── vga_text.rs    Legacy VGA 80×25 text-mode TerminalSink
 │       └── main.rs        BSP boot + init
 ├── shared/                no_std + host-testable logic (shell, ramfs, bitmap)
 ├── xtask/                 Build / ISO / run / test driver
@@ -66,18 +98,20 @@ console, and a small bash-like interactive shell.
 
 - Linux host (tested on Ubuntu 22.04)
 - Rust nightly (auto-installed via `rust-toolchain.toml`)
-- `xorriso`, `qemu-system-x86`, `nasm`, `mtools`
+- `xorriso`, `qemu-system-x86`, `nasm`, `mtools`, `imagemagick` (for
+  `xtask screenshot`), `ovmf` (for UEFI test variants)
 
 Install system deps:
 
 ```
-sudo apt-get install -y xorriso qemu-system-x86 nasm mtools
+sudo apt-get install -y xorriso qemu-system-x86 nasm mtools imagemagick ovmf
 ```
 
 ## Building
 
 ```
 cargo xtask iso             # build kernel + assemble target/sandboxos.iso
+cargo xtask iso-textmode    # same, but with the VGA 80×25 text-mode kernel
 ```
 
 ## Running
@@ -88,6 +122,16 @@ cargo xtask run             # boot the ISO under QEMU with a window + serial
 
 QEMU exposes COM1 on stdio. The shell prompt appears on both the QEMU window
 (framebuffer) and your terminal (serial). Type `help` to list commands.
+
+## Screenshots
+
+```
+cargo xtask screenshot      # captures docs/img/{framebuffer,vga-text}-console.png
+```
+
+Under the hood this boots each variant headlessly under QEMU, waits for the
+shell banner, runs a few demo commands, issues `screendump` over the QEMU
+monitor socket, and converts the PPM to PNG with ImageMagick.
 
 ## Automated tests
 

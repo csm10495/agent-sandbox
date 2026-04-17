@@ -17,6 +17,14 @@ x86_64 = "0.15"
 uart_16550 = "0.3"
 bitflags = "2"
 
+[features]
+default = []
+# Build a kernel image that makes no framebuffer request, so Limine leaves
+# the VGA card in 80x25 color text mode. The console then routes to the
+# in-kernel VGA text backend. Used by `xtask iso-textmode` and for
+# screenshots.
+textmode = []
+
 [package.metadata.bootimage]
 # Custom marker – used by xtask
 name = "sandbox-kernel"

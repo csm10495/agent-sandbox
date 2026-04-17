@@ -17,6 +17,8 @@ pub mod panic;
 pub mod sched;
 pub mod shell;
 pub mod smp;
+pub mod term;
+pub mod vga_text;
 
 use core::sync::atomic::Ordering;
 
@@ -71,7 +73,7 @@ pub extern "C" fn _start() -> ! {
     idt::load(idt_ref);
     println!("[boot] GDT + IDT loaded");
 
-    if let Some(fb_resp) = boot::FRAMEBUFFER_REQUEST.get_response() {
+    let have_fb = if let Some(fb_resp) = boot::FRAMEBUFFER_REQUEST.get_response() {
         if let Some(fb) = fb_resp.framebuffers().next() {
             let fb_obj = fb::Framebuffer::new(
                 fb.addr(),
@@ -87,9 +89,19 @@ pub extern "C" fn _start() -> ! {
                 fb.height(),
                 fb.bpp()
             );
+            true
+        } else {
+            false
         }
     } else {
-        println!("[boot] no framebuffer (serial only)");
+        false
+    };
+    if !have_fb {
+        // No pixel framebuffer (e.g. Limine `TEXTMODE=yes`). Fall back to the
+        // legacy VGA 80x25 color text buffer at physical 0xB8000, accessed
+        // via HHDM.
+        unsafe { console::init_vga_text(hhdm.offset()) };
+        println!("[boot] video: VGA 80x25 text mode");
     }
 
     lapic::set_base_vaddr(LAPIC_MMIO_PHYS + hhdm.offset());

@@ -24,17 +24,19 @@ fn main() {
     let cmd = args.get(1).map(|s| s.as_str()).unwrap_or("help");
     let rest: Vec<String> = args.iter().skip(2).cloned().collect();
     let res = match cmd {
-        "build" => build(false),
-        "build-release" => build(true),
-        "iso" => iso(true).map(|_| ()),
+        "build" => build(false, false),
+        "build-release" => build(true, false),
+        "iso" => iso(true, false).map(|_| ()),
+        "iso-textmode" => iso(true, true).map(|_| ()),
         "run" => run(&rest),
         "test" | "test-bios" => run_test(VmConfig::bios()),
         "test-uefi" => run_test(VmConfig::uefi()),
         "test-all" => test_all(),
+        "screenshot" => screenshot_all(),
         "clean" => clean(),
         _ => {
             eprintln!(
-                "xtask subcommands: build | build-release | iso | run | test | test-bios | test-uefi | test-all | clean"
+                "xtask subcommands: build | build-release | iso | iso-textmode | run | test | test-bios | test-uefi | test-all | screenshot | clean"
             );
             return;
         }
@@ -62,13 +64,16 @@ fn must(cmd: &mut Command) -> Result<(), String> {
     Ok(())
 }
 
-fn build(release: bool) -> Result<(), String> {
+fn build(release: bool, textmode: bool) -> Result<(), String> {
     let root = workspace_root();
     let mut c = Command::new("cargo");
     c.current_dir(&root)
         .args(["build", "-p", "kernel", "--target", "x86_64-unknown-none"]);
     if release {
         c.arg("--release");
+    }
+    if textmode {
+        c.args(["--features", "textmode"]);
     }
     must(&mut c)
 }
@@ -81,21 +86,35 @@ fn kernel_binary(release: bool) -> PathBuf {
         .join("kernel")
 }
 
-fn iso(release: bool) -> Result<PathBuf, String> {
-    build(release)?;
+/// Build the kernel + assemble an ISO. When `textmode` is true, the kernel
+/// is built without a framebuffer request and the Limine config boots with
+/// `TEXTMODE=yes`, so the console drives the legacy VGA 80x25 text buffer.
+fn iso(release: bool, textmode: bool) -> Result<PathBuf, String> {
+    build(release, textmode)?;
     let root = workspace_root();
-    let staging = root.join("target/iso_root");
+    let staging = root.join(if textmode {
+        "target/iso_root_text"
+    } else {
+        "target/iso_root"
+    });
     let _ = fs::remove_dir_all(&staging);
     fs::create_dir_all(staging.join("boot/limine")).map_err(|e| e.to_string())?;
     fs::create_dir_all(staging.join("EFI/BOOT")).map_err(|e| e.to_string())?;
 
     let kernel = kernel_binary(release);
     fs::copy(&kernel, staging.join("boot/kernel.elf")).map_err(|e| e.to_string())?;
-    fs::copy(
-        root.join("boot/limine.cfg"),
-        staging.join("boot/limine/limine.cfg"),
-    )
-    .map_err(|e| e.to_string())?;
+
+    if textmode {
+        // Dedicated text-mode Limine config: single entry, TEXTMODE=yes.
+        let cfg = "TIMEOUT=0\nSERIAL=yes\n\n:SandboxOS (VGA text mode)\n    PROTOCOL=limine\n    KERNEL_PATH=boot:///boot/kernel.elf\n    TEXTMODE=yes\n";
+        fs::write(staging.join("boot/limine/limine.cfg"), cfg).map_err(|e| e.to_string())?;
+    } else {
+        fs::copy(
+            root.join("boot/limine.cfg"),
+            staging.join("boot/limine/limine.cfg"),
+        )
+        .map_err(|e| e.to_string())?;
+    }
 
     for name in ["limine-bios.sys", "limine-bios-cd.bin", "limine-uefi-cd.bin"] {
         fs::copy(
@@ -115,7 +134,12 @@ fn iso(release: bool) -> Result<PathBuf, String> {
     )
     .map_err(|e| e.to_string())?;
 
-    let iso_path = root.join("target/sandboxos.iso");
+    let iso_name = if textmode {
+        "sandboxos-textmode.iso"
+    } else {
+        "sandboxos.iso"
+    };
+    let iso_path = root.join("target").join(iso_name);
     let _ = fs::remove_file(&iso_path);
     must(
         Command::new("xorriso")
@@ -257,7 +281,7 @@ fn pick_first_existing(paths: &[&str]) -> Option<String> {
 }
 
 fn run(_args: &[String]) -> Result<(), String> {
-    let iso = iso(false)?;
+    let iso = iso(false, false)?;
     // For interactive use, keep the display and use BIOS.
     let mut c = Command::new("qemu-system-x86_64");
     c.args(["-M", "q35", "-m", "256M", "-smp", "4", "-cdrom"])
@@ -318,7 +342,7 @@ fn test_all() -> Result<(), String> {
 /// token round-trip, CPU schedule/irq counters, preemption counts, and the
 /// `threadtest` PASS line all have to match.
 fn run_test(cfg: VmConfig) -> Result<(), String> {
-    let iso = iso(false)?;
+    let iso = iso(false, false)?;
 
     const MAGIC: &str = "SANDBOXOS-MAGIC-TOKEN-7F3A1C9E";
     const AFTER_RM_SENTINEL: &str = "AFTER-RM-LISTING-SENTINEL-X";
@@ -686,4 +710,215 @@ fn find_last_block<'a>(output: &'a str, start_needle: &str, end_needle: &str) ->
         }
         None => tail,
     })
+}
+
+// ============================== Screenshots ==============================
+
+/// Build both ISO variants and capture a QEMU screendump of each, saving
+/// PNGs under `docs/img/`. These are embedded in the README.
+fn screenshot_all() -> Result<(), String> {
+    let root = workspace_root();
+    let out_dir = root.join("docs/img");
+    fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+
+    // --- Graphics (framebuffer) variant ---
+    let iso_fb = iso(true, false)?;
+    let fb_cmds = vec![
+        "uname".to_string(),
+        "cat /etc/motd".to_string(),
+        "ls /etc".to_string(),
+        "mem".to_string(),
+        "cpus".to_string(),
+    ];
+    capture_screenshot(
+        &iso_fb,
+        false,
+        &fb_cmds,
+        &out_dir.join("framebuffer-console.png"),
+        "framebuffer",
+    )?;
+
+    // --- VGA text variant ---
+    let iso_vga = iso(true, true)?;
+    let vga_cmds = vec![
+        "uname".to_string(),
+        "cat /etc/motd".to_string(),
+        "ls /etc".to_string(),
+        "mem".to_string(),
+        "cpus".to_string(),
+    ];
+    capture_screenshot(
+        &iso_vga,
+        true,
+        &vga_cmds,
+        &out_dir.join("vga-text-console.png"),
+        "vga-text",
+    )?;
+
+    println!("screenshots saved under {}", out_dir.display());
+    Ok(())
+}
+
+fn capture_screenshot(
+    iso: &Path,
+    textmode: bool,
+    cmds: &[String],
+    out_png: &Path,
+    label: &str,
+) -> Result<(), String> {
+    let root = workspace_root();
+    // Keep one monitor socket per label so parallel invocations don't clash.
+    let mon_path = root.join(format!("target/qemu-mon-{}.sock", label));
+    let _ = fs::remove_file(&mon_path);
+    let ppm_path = root.join(format!("target/screen-{}.ppm", label));
+    let _ = fs::remove_file(&ppm_path);
+
+    let mut c = Command::new("qemu-system-x86_64");
+    c.args(["-M", "q35", "-m", "256M", "-smp", "2", "-cdrom"])
+        .arg(iso)
+        .args([
+            "-boot",
+            "d",
+            "-no-reboot",
+            "-display",
+            "none",
+            "-serial",
+            "stdio",
+            "-device",
+            "isa-debug-exit,iobase=0xf4,iosize=0x04",
+            "-monitor",
+        ])
+        .arg(format!("unix:{},server,nowait", mon_path.display()));
+    // For the text-mode capture we prefer the legacy "-vga std" so the
+    // emulator renders the VGA 80x25 buffer.
+    if textmode {
+        c.args(["-vga", "std"]);
+    }
+
+    let mut child = c
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|e| format!("spawn qemu: {}", e))?;
+
+    let stdin = child.stdin.take().unwrap();
+    let mut stdout = child.stdout.take().unwrap();
+
+    let reader = std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        let mut all = String::new();
+        loop {
+            match stdout.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let s = String::from_utf8_lossy(&buf[..n]).to_string();
+                    print!("{}", s);
+                    std::io::stdout().flush().ok();
+                    all.push_str(&s);
+                }
+                Err(_) => break,
+            }
+        }
+        all
+    });
+
+    // Wait for the welcome banner before driving commands.
+    std::thread::sleep(Duration::from_millis(2500));
+
+    let mut writer = stdin;
+    for cmd in cmds {
+        writeln!(writer, "{}", cmd).map_err(|e| e.to_string())?;
+        writer.flush().ok();
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    // Let the display settle.
+    std::thread::sleep(Duration::from_millis(1500));
+
+    // Tell QEMU to screendump via the monitor socket.
+    qemu_monitor_cmd(&mon_path, &format!("screendump {}", ppm_path.display()))?;
+    // Screendump writes asynchronously on older QEMUs; wait for the file.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !ppm_path.exists() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    if !ppm_path.exists() {
+        let _ = child.kill();
+        let _ = reader.join();
+        return Err("screendump PPM was never written".into());
+    }
+    // Give QEMU a moment to finish writing, then quit gracefully.
+    std::thread::sleep(Duration::from_millis(300));
+    let _ = writeln!(writer, "shutdown");
+    let _ = writer.flush();
+    drop(writer);
+
+    // Bound the wait for QEMU to exit.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        match child.try_wait().map_err(|e| e.to_string())? {
+            Some(_) => break,
+            None => {
+                if Instant::now() > deadline {
+                    let _ = child.kill();
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+    }
+    let _ = reader.join();
+
+    // Convert PPM → PNG.
+    must(Command::new("convert").arg(&ppm_path).arg(out_png))?;
+    // Keep files small: also crop to non-empty region for VGA? Keep as-is.
+
+    println!("saved {}", out_png.display());
+    Ok(())
+}
+
+/// Send a one-shot command to a QEMU monitor unix socket and wait briefly
+/// for the prompt to return.
+fn qemu_monitor_cmd(sock: &Path, cmd: &str) -> Result<(), String> {
+    use std::io::BufRead;
+    use std::os::unix::net::UnixStream;
+
+    // Retry briefly in case QEMU hasn't created the socket yet.
+    let mut stream = None;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        match UnixStream::connect(sock) {
+            Ok(s) => {
+                stream = Some(s);
+                break;
+            }
+            Err(_) => std::thread::sleep(Duration::from_millis(100)),
+        }
+    }
+    let mut stream = stream.ok_or_else(|| format!("could not connect to qemu monitor {:?}", sock))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .map_err(|e| e.to_string())?;
+    // Drain any banner.
+    let mut reader = std::io::BufReader::new(stream.try_clone().map_err(|e| e.to_string())?);
+    let mut line = String::new();
+    for _ in 0..20 {
+        line.clear();
+        if reader.read_line(&mut line).is_err() {
+            break;
+        }
+        if line.contains("(qemu)") {
+            break;
+        }
+    }
+    writeln!(stream, "{}", cmd).map_err(|e| e.to_string())?;
+    stream.flush().ok();
+    // Read a bit of response.
+    for _ in 0..5 {
+        line.clear();
+        if reader.read_line(&mut line).is_err() {
+            break;
+        }
+    }
+    Ok(())
 }

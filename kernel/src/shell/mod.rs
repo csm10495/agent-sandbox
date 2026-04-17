@@ -72,13 +72,18 @@ fn readline(buf: &mut String) -> &str {
 }
 
 pub fn run() {
+    // Colorize the banner so both the framebuffer console and the VGA
+    // text-mode console exercise the ANSI parser and show non-default
+    // colors. The serial terminal renders the same escapes natively.
+    print!("\x1b[1;36m"); // bright cyan
     println!("{}", BANNER);
+    print!("\x1b[0m");
     if let Ok(motd) = fs::read("/etc/motd") {
         if let Ok(s) = core::str::from_utf8(&motd) {
-            print!("{}", s);
+            print!("\x1b[1;32m{}\x1b[0m", s); // green motd
         }
     }
-    println!("Type 'help' for a list of commands.\n");
+    println!("Type '\x1b[1;33mhelp\x1b[0m' for a list of commands.\n");
 
     let mut line = String::new();
     loop {
