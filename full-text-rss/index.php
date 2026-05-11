@@ -130,6 +130,15 @@ if (!defined('_FF_FTR_INDEX')) {
 	</select>
 	</div>
 	</div>
+	<div class="control-group">
+	<label class="control-label" for="proxy_links">Proxy article links</label>
+	<div class="controls">
+		<label class="checkbox" for="proxy_links" style="padding-top: 5px;" title="When checked, each item's link in the resulting feed is rewritten to go back through this Full-Text RSS instance, so clicking it serves the full-text article via this app instead of the original page.">
+			<input type="checkbox" name="proxy_links" id="proxy_links" value="1" />
+			Rewrite each item link to fetch the full-text version via this app
+		</label>
+	</div>
+	</div>
 	<?php if ($options->exclude_items_on_fail == 'user') { ?>
 	<div class="control-group">
 	<label class="control-label" for="exc">If extraction fails</label>

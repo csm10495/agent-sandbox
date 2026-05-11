@@ -1197,12 +1197,18 @@ if (!$debug_mode) {
 // Rewrite an article URL so it points back through this Full-Text RSS instance.
 // This means that when a user clicks the link in their RSS reader, they get the
 // full-text version of the article served by this app rather than the original
-// (often partial) page. This is applied unconditionally to every feed item's
-// <link>. If the URL is empty or already points to this instance, it is
-// returned unchanged to avoid recursion.
+// (often partial) page.
+//
+// Opt-in: only active when the request includes proxy_links=1 (set by the
+// "Proxy article links through this app" checkbox in the UI, or by callers of
+// the API directly). When disabled, the URL is returned unchanged.
+//
+// If the URL is empty or already points to this instance, it is also returned
+// unchanged to avoid recursion.
 function proxy_item_url($item_url) {
 	global $options;
 	if (!is_string($item_url) || $item_url === '') return $item_url;
+	if (empty($_GET['proxy_links'])) return $item_url;
 	$scheme = (is_ssl()) ? 'https://' : 'http://';
 	$host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
 	$path = isset($_SERVER['SCRIPT_NAME']) ? rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') : '';
@@ -1247,6 +1253,7 @@ function get_self_url() {
 	if (isset($_GET['accept'])) $self .= '&accept='.urlencode($_GET['accept']);		
 	if (isset($_GET['max'])) $self .= '&max='.(int)$_GET['max'];
 	if (isset($_GET['links'])) $self .= '&links='.urlencode($_GET['links']);
+	if (isset($_GET['proxy_links'])) $self .= '&proxy_links='.urlencode($_GET['proxy_links']);
 	if (isset($_GET['images'])) $self .= '&images='.urlencode($_GET['images']);
 	if (isset($_GET['exc'])) $self .= '&exc='.urlencode($_GET['exc']);
 	if (isset($_GET['format'])) $self .= '&format='.urlencode($_GET['format']);
