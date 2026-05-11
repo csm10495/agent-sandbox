@@ -37,6 +37,21 @@ docker run --rm -p 8080:80 ftr-patched
 # then open http://localhost:8080/
 ```
 
+## Verifying the feature
+
+The form is a `GET` to `makefulltextfeed.php`, and our checkbox JS rewrites the
+`links` field to `footnotes` on submit. So ticking the checkbox is equivalent
+to calling:
+
+```sh
+curl 'http://localhost:8080/makefulltextfeed.php?url=<ARTICLE_URL>&links=footnotes'
+```
+
+Verified against a live BBC News article: with `links=preserve` the body has
+inline `<a>` tags only; with `links=footnotes` the inline links are replaced
+with `[1]`, `[2]`, … markers and a `<h3>References</h3>` `<ol>` is appended
+to the article.
+
 ## Screenshot
 
 ![UI with new checkbox](docs/ui-screenshot.png)
