@@ -1,0 +1,102 @@
+--- a/index.php	2026-05-10 14:18:48.000000000 +0000
++++ b/index.php	2026-05-11 02:00:36.788202085 +0000
+@@ -130,6 +130,15 @@
+ 	</select>
+ 	</div>
+ 	</div>
++	<div class="control-group">
++	<label class="control-label" for="proxy_links">Proxy article links</label>
++	<div class="controls">
++		<label class="checkbox" for="proxy_links" style="padding-top: 5px;" title="When checked, each item's link in the resulting feed is rewritten to go back through this Full-Text RSS instance, so clicking it serves the full-text article via this app instead of the original page.">
++			<input type="checkbox" name="proxy_links" id="proxy_links" value="1" />
++			Rewrite each item link to fetch the full-text version via this app
++		</label>
++	</div>
++	</div>
+ 	<?php if ($options->exclude_items_on_fail == 'user') { ?>
+ 	<div class="control-group">
+ 	<label class="control-label" for="exc">If extraction fails</label>
+--- a/makefulltextfeed.php	2026-05-10 14:18:49.000000000 +0000
++++ b/makefulltextfeed.php	2026-05-11 02:00:48.213178766 +0000
+@@ -472,7 +472,7 @@
+ //////////////////////////////////
+ if ($options->caching) {
+ 	debug('Caching is enabled...');
+-	$cache_id = md5($max.$url.(int)$valid_key.$accept.$links.$images.(int)$favour_feed_titles.(int)$options->content.(int)$options->html5_output.(int)$options->summary.(int)$xss_filter.(int)$favour_effective_url.(int)$exclude_on_fail.$format.$detect_language.$parser.$user_submitted_config._FF_FTR_MODE);
++	$cache_id = md5($max.$url.(int)$valid_key.$accept.$links.$images.(int)$favour_feed_titles.(int)$options->content.(int)$options->html5_output.(int)$options->summary.(int)$xss_filter.(int)$favour_effective_url.(int)$exclude_on_fail.$format.$detect_language.$parser.$user_submitted_config._FF_FTR_MODE.(isset($_GET['proxy_links']) && $_GET['proxy_links'] !== '' && $_GET['proxy_links'] !== '0' ? '1' : '0'));
+ 	$check_cache = true;
+ 	if ($options->apc && $options->smart_cache) {
+ 		apc_add("cache.$cache_id", 0, $options->cache_time*60);
+@@ -714,9 +714,9 @@
+ 	$newitem = $output->createNewItem();
+ 	$newitem->setTitle($feed_item_title);
+ 	if ($permalink !== false) {
+-		$newitem->setLink($permalink);
++		$newitem->setLink(proxy_item_url($permalink));
+ 	} else {
+-		$newitem->setLink($item->get_permalink());
++		$newitem->setLink(proxy_item_url($item->get_permalink()));
+ 	}
+ 	// Status codes to accept (200 range)
+ 	// Some sites might return correct content with error status codes
+@@ -1087,7 +1087,7 @@
+ 		//http://www.siasat.pk/forum/showthread.php?108883-Pakistan-Chowk-by-Rana-Mubashir-–-25th-March-2012-Special-Program-from-Liari-(Karachi)
+ 		//temporary measure: use utf8_encode()
+ 		$newitem->addElement('dc:identifier', remove_url_cruft(utf8_encode($effective_url)));
+-		if ($favour_effective_url) $newitem->setLink(remove_url_cruft(utf8_encode($effective_url)));
++		if ($favour_effective_url) $newitem->setLink(proxy_item_url(remove_url_cruft(utf8_encode($effective_url))));
+ 	} else {
+ 		$newitem->addElement('dc:identifier', remove_url_cruft($item->get_permalink()));
+ 	}
+@@ -1194,6 +1194,43 @@
+ // HELPER FUNCTIONS
+ ///////////////////////////////
+ 
++// Rewrite an article URL so it points back through this Full-Text RSS instance.
++// This means that when a user clicks the link in their RSS reader, they get the
++// full-text version of the article served by this app rather than the original
++// (often partial) page.
++//
++// Opt-in: only active when the request includes proxy_links=1 (set by the
++// "Proxy article links through this app" checkbox in the UI, or by callers of
++// the API directly). When disabled, the URL is returned unchanged.
++//
++// If the URL is empty or already points to this instance, it is also returned
++// unchanged to avoid recursion.
++function proxy_item_url($item_url) {
++	global $options;
++	if (!is_string($item_url) || $item_url === '') return $item_url;
++	if (empty($_GET['proxy_links'])) return $item_url;
++	$scheme = (is_ssl()) ? 'https://' : 'http://';
++	$host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
++	$path = isset($_SERVER['SCRIPT_NAME']) ? rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') : '';
++	if ($host === '') return $item_url;
++	$base = $scheme.$host.$path.'/makefulltextfeed.php';
++	// Avoid infinite recursion: if the URL already targets this instance, leave it alone.
++	if (stripos($item_url, $scheme.$host.$path.'/makefulltextfeed.php') === 0) return $item_url;
++	$_qs_url = (strtolower(substr($item_url, 0, 7)) == 'http://') ? substr($item_url, 7) : $item_url;
++	$proxied = $base.'?url='.urlencode($_qs_url);
++	// If the user supplied the actual API key, pass key+per-item-hash so the
++	// proxied links can authenticate. If only key-index+hash was supplied we
++	// don't know the secret, so we leave auth off (proxied links will only
++	// work on instances that don't require a key).
++	if (isset($_GET['key']) && isset($options->api_keys) && is_array($options->api_keys)
++			&& ($key_index = array_search($_GET['key'], $options->api_keys)) !== false) {
++		$_hash = sha1($_GET['key'].$item_url);
++		$proxied .= '&key='.$key_index;
++		$proxied .= '&hash='.urlencode($_hash);
++	}
++	return $proxied;
++}
++
+ function get_self_url() {
+ 	global $options, $url;
+ 	$scheme = (is_ssl()) ? 'https://' : 'http://';
+@@ -1216,6 +1253,7 @@
+ 	if (isset($_GET['accept'])) $self .= '&accept='.urlencode($_GET['accept']);		
+ 	if (isset($_GET['max'])) $self .= '&max='.(int)$_GET['max'];
+ 	if (isset($_GET['links'])) $self .= '&links='.urlencode($_GET['links']);
++	if (isset($_GET['proxy_links'])) $self .= '&proxy_links='.urlencode($_GET['proxy_links']);
+ 	if (isset($_GET['images'])) $self .= '&images='.urlencode($_GET['images']);
+ 	if (isset($_GET['exc'])) $self .= '&exc='.urlencode($_GET['exc']);
+ 	if (isset($_GET['format'])) $self .= '&format='.urlencode($_GET['format']);
