@@ -1,8 +1,21 @@
 # Unofficial fivefilters Full-Text RSS service
-# Patched to add a "Convert links to footnotes" checkbox to the UI.
-# Modeled on https://github.com/heussd/fivefilters-full-text-rss-docker
+# Mirrors the upstream Dockerfile from
+# https://github.com/heussd/fivefilters-full-text-rss-docker
+# and then applies full-text-rss.patch on top so the resulting image carries
+# our opt-in "Proxy article links" feature (?proxy_links=1 / UI checkbox).
 
-# Pull the latest site-config patterns from the official repo.
+# Stage 1: clone upstream Full-Text RSS at the pinned commit and apply our patch.
+FROM alpine/git AS gitsrc
+WORKDIR /ftr
+RUN git clone https://bitbucket.org/fivefilters/full-text-rss.git . \
+    && git reset --hard 384d52fd83361ffd6e7f28bd39b322970a015a28
+COPY full-text-rss.patch /tmp/full-text-rss.patch
+# git apply works without a git index and gives clear errors if the patch
+# doesn't cleanly match the pinned upstream commit.
+RUN git apply --verbose -p1 /tmp/full-text-rss.patch \
+    && rm /tmp/full-text-rss.patch
+
+# Stage 2: pull the latest site-config patterns from the official repo.
 FROM alpine/git AS gitconfig
 WORKDIR /ftr-site-config
 RUN git clone https://github.com/fivefilters/ftr-site-config .
@@ -25,9 +38,8 @@ RUN apt-get update \
 
 RUN docker-php-ext-install tidy
 
-# Copy our patched Full-Text RSS source (with the new "Convert links" checkbox)
-# instead of cloning fresh from Bitbucket.
-COPY full-text-rss/ /var/www/html/
+# Patched Full-Text RSS source (upstream + full-text-rss.patch applied).
+COPY --from=gitsrc /ftr /var/www/html
 
 # Overlay the latest site-config patterns.
 COPY --from=gitconfig /ftr-site-config/.* /ftr-site-config/* /var/www/html/site_config/standard/

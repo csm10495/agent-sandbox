@@ -20,10 +20,9 @@ When the flag is absent (or `0` / empty), behaviour is identical to upstream.
 
 | Path | What it is |
 | --- | --- |
-| `full-text-rss/` | Full-Text RSS source, cloned from upstream Bitbucket and patched. |
-| `full-text-rss.patch` | Unified diff of every change applied on top of upstream (`index.php` + `makefulltextfeed.php`). |
+| `Dockerfile` | Mirrors [`heussd/fivefilters-full-text-rss-docker`](https://github.com/heussd/fivefilters-full-text-rss-docker): clones upstream Full-Text RSS at the pinned commit and applies `full-text-rss.patch` on top. No FTR source is vendored in this repo. |
+| `full-text-rss.patch` | Unified diff (`index.php` + `makefulltextfeed.php`) of every change applied on top of upstream — the single source of truth for the feature. |
 | `docs/ui-screenshot.png` | Screenshot of the UI as served by the Docker container, showing the new checkbox. |
-| `Dockerfile` | Container image (modeled on [`heussd/fivefilters-full-text-rss-docker`](https://github.com/heussd/fivefilters-full-text-rss-docker)) that serves the patched FTR. |
 
 ## How the rewrite works
 
@@ -62,13 +61,18 @@ Upstream commit: `384d52fd83361ffd6e7f28bd39b322970a015a28`
 ("Fix PHP 7.2/7.3 incompatibilites") from
 <https://bitbucket.org/fivefilters/full-text-rss>.
 
-To re-create / verify the patch:
+To verify the patch applies cleanly to that commit:
 
 ```sh
 git clone https://bitbucket.org/fivefilters/full-text-rss.git /tmp/ftr-upstream
-diff -urN /tmp/ftr-upstream/index.php           full-text-rss/index.php
-diff -urN /tmp/ftr-upstream/makefulltextfeed.php full-text-rss/makefulltextfeed.php
+cd /tmp/ftr-upstream
+git reset --hard 384d52fd83361ffd6e7f28bd39b322970a015a28
+git apply --check /path/to/this/repo/full-text-rss.patch
 ```
+
+The Docker build performs this same `git apply` step inside the `gitsrc`
+stage, so a successful `docker build` is itself proof that the patch still
+matches upstream.
 
 ## Building and running
 
