@@ -1,5 +1,5 @@
---- a/index.php
-+++ b/index.php
+--- a/index.php	2026-05-10 14:18:48.000000000 +0000
++++ b/index.php	2026-05-11 02:00:36.788202085 +0000
 @@ -130,6 +130,15 @@
  	</select>
  	</div>
@@ -16,8 +16,17 @@
  	<?php if ($options->exclude_items_on_fail == 'user') { ?>
  	<div class="control-group">
  	<label class="control-label" for="exc">If extraction fails</label>
---- a/makefulltextfeed.php
-+++ b/makefulltextfeed.php
+--- a/makefulltextfeed.php	2026-05-10 14:18:49.000000000 +0000
++++ b/makefulltextfeed.php	2026-05-11 02:00:48.213178766 +0000
+@@ -472,7 +472,7 @@
+ //////////////////////////////////
+ if ($options->caching) {
+ 	debug('Caching is enabled...');
+-	$cache_id = md5($max.$url.(int)$valid_key.$accept.$links.$images.(int)$favour_feed_titles.(int)$options->content.(int)$options->html5_output.(int)$options->summary.(int)$xss_filter.(int)$favour_effective_url.(int)$exclude_on_fail.$format.$detect_language.$parser.$user_submitted_config._FF_FTR_MODE);
++	$cache_id = md5($max.$url.(int)$valid_key.$accept.$links.$images.(int)$favour_feed_titles.(int)$options->content.(int)$options->html5_output.(int)$options->summary.(int)$xss_filter.(int)$favour_effective_url.(int)$exclude_on_fail.$format.$detect_language.$parser.$user_submitted_config._FF_FTR_MODE.(isset($_GET['proxy_links']) && $_GET['proxy_links'] !== '' && $_GET['proxy_links'] !== '0' ? '1' : '0'));
+ 	$check_cache = true;
+ 	if ($options->apc && $options->smart_cache) {
+ 		apc_add("cache.$cache_id", 0, $options->cache_time*60);
 @@ -714,9 +714,9 @@
  	$newitem = $output->createNewItem();
  	$newitem->setTitle($feed_item_title);

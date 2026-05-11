@@ -20,8 +20,8 @@ When the flag is absent (or `0` / empty), behaviour is identical to upstream.
 
 | Path | What it is |
 | --- | --- |
-| `Dockerfile` | Mirrors [`heussd/fivefilters-full-text-rss-docker`](https://github.com/heussd/fivefilters-full-text-rss-docker): clones upstream Full-Text RSS at the pinned commit and applies `full-text-rss.patch` on top. No FTR source is vendored in this repo. |
-| `full-text-rss.patch` | Unified diff (`index.php` + `makefulltextfeed.php`) of every change applied on top of upstream — the single source of truth for the feature. |
+| `Dockerfile` | `FROM heussd/fivefilters-full-text-rss:3.8.1` (the published upstream image) with `full-text-rss.patch` applied on top in a small builder stage. No FTR source is vendored in this repo, no apt/git work is repeated. |
+| `full-text-rss.patch` | Unified diff (`index.php` + `makefulltextfeed.php`) of every change applied on top of the published image — the single source of truth for the feature. |
 | `docs/ui-screenshot.png` | Screenshot of the UI as served by the Docker container, showing the new checkbox. |
 
 ## How the rewrite works
@@ -46,6 +46,9 @@ In `makefulltextfeed.php`:
   isn't recoverable), the proxied links omit auth.
 * `get_self_url()` also emits `proxy_links=…` so the canonical
   `<atom:link rel="self">` of the generated feed reflects the chosen mode.
+* The cache key (`$cache_id` in `makefulltextfeed.php`) incorporates the
+  `proxy_links` flag so a default request and a `proxy_links=1` request for
+  the same feed don't collide in the on-disk cache.
 
 The channel-level `<link>` (and the channel image's `<link>`) are
 intentionally **not** rewritten — those describe the source feed, not
@@ -57,22 +60,24 @@ JavaScript needed; the form just submits `proxy_links=1` when ticked.
 
 ## Upstream baseline
 
-Upstream commit: `384d52fd83361ffd6e7f28bd39b322970a015a28`
-("Fix PHP 7.2/7.3 incompatibilites") from
-<https://bitbucket.org/fivefilters/full-text-rss>.
+Built on top of the published image
+[`heussd/fivefilters-full-text-rss:3.8.1`](https://hub.docker.com/r/heussd/fivefilters-full-text-rss),
+which itself packages [fivefilters Full-Text RSS](https://bitbucket.org/fivefilters/full-text-rss).
 
-To verify the patch applies cleanly to that commit:
+To verify the patch applies cleanly to that image:
 
 ```sh
-git clone https://bitbucket.org/fivefilters/full-text-rss.git /tmp/ftr-upstream
-cd /tmp/ftr-upstream
-git reset --hard 384d52fd83361ffd6e7f28bd39b322970a015a28
-git apply --check /path/to/this/repo/full-text-rss.patch
+docker create --name ftr-extract heussd/fivefilters-full-text-rss:3.8.1 true
+mkdir /tmp/ftr && cd /tmp/ftr
+docker cp ftr-extract:/var/www/html/index.php           .
+docker cp ftr-extract:/var/www/html/makefulltextfeed.php .
+docker rm ftr-extract
+patch -p1 --dry-run < /path/to/this/repo/full-text-rss.patch
 ```
 
-The Docker build performs this same `git apply` step inside the `gitsrc`
+The Docker build performs the same `patch` step inside its `patcher`
 stage, so a successful `docker build` is itself proof that the patch still
-matches upstream.
+matches the pinned upstream image.
 
 ## Building and running
 
