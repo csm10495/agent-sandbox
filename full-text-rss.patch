@@ -1,0 +1,30 @@
+--- a/index.php
++++ b/index.php
+@@ -26,6 +26,11 @@
+ 		$('#form').submit(function() {
+ 			$('#url').val($('#url').val().replace(/^http:\/\//i, ''));
+ 			$('#url').val($('#url').val().replace(/^https:\/\//i, 'sec://'));
++			// if "convert links to footnotes" checkbox is ticked,
++			// override the Links dropdown so links are converted to footnotes
++			if ($('#convert_links').is(':checked')) {
++				$('#links').val('footnotes');
++			}
+ 			return true;
+ 		});
+ 		// popovers
+@@ -130,6 +135,15 @@
+ 	</select>
+ 	</div>
+ 	</div>
++	<div class="control-group">
++	<label class="control-label" for="convert_links">Convert links</label>
++	<div class="controls">
++		<label class="checkbox" for="convert_links" style="padding-top: 5px;">
++			<input type="checkbox" name="convert_links" id="convert_links" value="1" />
++			Convert links to footnotes
++		</label>
++	</div>
++	</div>
+ 	<?php if ($options->exclude_items_on_fail == 'user') { ?>
+ 	<div class="control-group">
+ 	<label class="control-label" for="exc">If extraction fails</label>
