@@ -714,9 +714,9 @@ foreach ($items as $key => $item) {
 	$newitem = $output->createNewItem();
 	$newitem->setTitle($feed_item_title);
 	if ($permalink !== false) {
-		$newitem->setLink($permalink);
+		$newitem->setLink(proxy_item_url($permalink));
 	} else {
-		$newitem->setLink($item->get_permalink());
+		$newitem->setLink(proxy_item_url($item->get_permalink()));
 	}
 	// Status codes to accept (200 range)
 	// Some sites might return correct content with error status codes
@@ -1087,7 +1087,7 @@ foreach ($items as $key => $item) {
 		//http://www.siasat.pk/forum/showthread.php?108883-Pakistan-Chowk-by-Rana-Mubashir-–-25th-March-2012-Special-Program-from-Liari-(Karachi)
 		//temporary measure: use utf8_encode()
 		$newitem->addElement('dc:identifier', remove_url_cruft(utf8_encode($effective_url)));
-		if ($favour_effective_url) $newitem->setLink(remove_url_cruft(utf8_encode($effective_url)));
+		if ($favour_effective_url) $newitem->setLink(proxy_item_url(remove_url_cruft(utf8_encode($effective_url))));
 	} else {
 		$newitem->addElement('dc:identifier', remove_url_cruft($item->get_permalink()));
 	}
@@ -1193,6 +1193,37 @@ if (!$debug_mode) {
 ///////////////////////////////
 // HELPER FUNCTIONS
 ///////////////////////////////
+
+// Rewrite an article URL so it points back through this Full-Text RSS instance.
+// This means that when a user clicks the link in their RSS reader, they get the
+// full-text version of the article served by this app rather than the original
+// (often partial) page. This is applied unconditionally to every feed item's
+// <link>. If the URL is empty or already points to this instance, it is
+// returned unchanged to avoid recursion.
+function proxy_item_url($item_url) {
+	global $options;
+	if (!is_string($item_url) || $item_url === '') return $item_url;
+	$scheme = (is_ssl()) ? 'https://' : 'http://';
+	$host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
+	$path = isset($_SERVER['SCRIPT_NAME']) ? rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\') : '';
+	if ($host === '') return $item_url;
+	$base = $scheme.$host.$path.'/makefulltextfeed.php';
+	// Avoid infinite recursion: if the URL already targets this instance, leave it alone.
+	if (stripos($item_url, $scheme.$host.$path.'/makefulltextfeed.php') === 0) return $item_url;
+	$_qs_url = (strtolower(substr($item_url, 0, 7)) == 'http://') ? substr($item_url, 7) : $item_url;
+	$proxied = $base.'?url='.urlencode($_qs_url);
+	// If the user supplied the actual API key, pass key+per-item-hash so the
+	// proxied links can authenticate. If only key-index+hash was supplied we
+	// don't know the secret, so we leave auth off (proxied links will only
+	// work on instances that don't require a key).
+	if (isset($_GET['key']) && isset($options->api_keys) && is_array($options->api_keys)
+			&& ($key_index = array_search($_GET['key'], $options->api_keys)) !== false) {
+		$_hash = sha1($_GET['key'].$item_url);
+		$proxied .= '&key='.$key_index;
+		$proxied .= '&hash='.urlencode($_hash);
+	}
+	return $proxied;
+}
 
 function get_self_url() {
 	global $options, $url;
