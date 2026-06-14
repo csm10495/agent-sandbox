@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 import urllib.request
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from .api import GametimeError, extract_event_id, fetch_event_html, parse_event, parse_listings
 from .filters import SectionMatcher, filter_listings
@@ -37,7 +37,7 @@ def _scan(url_or_id: str, args) -> "tuple[Optional[Event], List[Listing], List[L
     all_listings = parse_listings(html)
     matches = filter_listings(
         all_listings,
-        sections=args.sections,
+        sections=_sections_spec(args),
         max_price_dollars=args.max_price,
         quantity=args.quantity,
         allow_larger=args.allow_larger,
@@ -56,8 +56,15 @@ def _emit_json(event: Optional[Event], matches: List[Listing]) -> str:
     )
 
 
+def _sections_spec(args) -> Optional[str]:
+    """Merge repeated --sections values into one comma-separated spec (or None)."""
+    if not args.sections:
+        return None
+    return ",".join(args.sections)
+
+
 def _criteria_text(args) -> str:
-    sec = args.sections or "any section"
+    sec = _sections_spec(args) or "any section"
     price = f"<= ${args.max_price:.2f}/ticket" if args.max_price is not None else "any price"
     qty = f"{args.quantity} seat(s)" if args.quantity else "any quantity"
     extra = " (or larger lots)" if args.allow_larger and args.quantity else ""
@@ -108,9 +115,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("event", help="Gametime event/listing URL, short link, or 24-char event id")
     p.add_argument(
-        "-s", "--sections",
+        "-s", "--sections", action="append",
         help="Section filter: ranges (200-299), exact (119), or group names "
-             "(\"Solon Club\"); comma-separated. Default: all sections.",
+             "(\"Solon Club\"); comma-separated. May be given multiple times "
+             "to combine filters. Default: all sections.",
     )
     p.add_argument(
         "-p", "--max-price", type=float,

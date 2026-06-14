@@ -56,3 +56,21 @@ def test_cli_default_quantity_one_lists_all_sections(capsys):
     # quantity defaults to 1; only listing 'd' (lots [1,2]) offers a single seat.
     assert rc == 0
     assert {m["id"] for m in data["matches"]} == {"aaaaaaaaaaaaaaaaaaaaaaa4"}
+
+
+def test_cli_repeated_sections_flag(capsys):
+    """--sections given multiple times combines them (OR logic)."""
+    rc = cli.main([EVENT_ID, "-s", "200-299", "-s", "117", "-q", "2", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    # 117 (a), 201 (b), 203 (c) all have lot=2
+    assert {m["section"] for m in data["matches"]} == {"117", "201", "203"}
+
+
+def test_cli_repeated_sections_with_group_name(capsys):
+    """Mixing range and name across multiple --sections flags."""
+    rc = cli.main([EVENT_ID, "-s", "119", "-s", "General Admission", "-q", "2", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    # 119 (d) has lot [1,2], "General Admission" is Lawn (e) lot [4] -> excluded by qty=2
+    assert rc == 0
+    assert {m["section"] for m in data["matches"]} == {"119"}

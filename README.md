@@ -52,6 +52,7 @@ python -m gametime_watcher <event> [options]
                           200-299        an inclusive numeric range
                           119            an exact section
                           "Solon Club"   a section-group / section name
+                        May be given multiple times to combine filters (OR).
                         Default: all sections.
   -p, --max-price N     Maximum all-in price PER TICKET, in dollars.
   -q, --quantity N      Seats wanted together (default 1). Only listings that
@@ -82,8 +83,9 @@ python -m gametime_watcher 68af5b72c95bdeed8553f07f -s 100-130 -q 4 -p 75
 # Any 2 seats in a named club section
 python -m gametime_watcher <url> -s "Solon Club" -q 2
 
-# Mix ranges, exact sections, and names
+# Mix ranges, exact sections, and names (comma-separated or repeated -s)
 python -m gametime_watcher <url> -s "200-299,119,Field Level" -q 2 -p 120
+python -m gametime_watcher <url> -s 200-299 -s 119 -s "Field Level" -q 2 -p 120
 ```
 
 Watch and get notified (every 2 minutes) via a webhook:
