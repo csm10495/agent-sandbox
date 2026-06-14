@@ -201,11 +201,105 @@ def _run_search(argv: List[str]) -> int:
     return 0 if events else 1
 
 
+def _build_scan_all_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="gametime_watcher scan-all",
+        description=(
+            "Search for all events matching a query (e.g. a team name) and scan "
+            "each one for tickets matching section/price/quantity criteria."
+        ),
+    )
+    p.add_argument("query", help="Team or performer to search for (e.g. 'Athletics').")
+    p.add_argument(
+        "-s", "--sections", action="append",
+        help="Section filter (may be repeated). See main command for syntax.",
+    )
+    p.add_argument("-p", "--max-price", type=float, help="Max all-in price PER TICKET, in dollars.")
+    p.add_argument("-q", "--quantity", type=int, default=1, help="Seats wanted together (default 1).")
+    p.add_argument("--allow-larger", action="store_true", help="Also keep larger lots.")
+    p.add_argument("--json", action="store_true", help="Output JSON instead of text.")
+    p.add_argument("--user-agent", default=None, help="Override the HTTP User-Agent.")
+    p.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds.")
+    return p
+
+
+def _run_scan_all(argv: List[str]) -> int:
+    """Handle the ``scan-all`` subcommand: search + filter each event."""
+    parser = _build_scan_all_parser()
+    args = parser.parse_args(argv)
+    if args.user_agent is None:
+        from .api import DEFAULT_USER_AGENT
+        args.user_agent = DEFAULT_USER_AGENT
+    if args.quantity is not None and args.quantity < 1:
+        parser.error("--quantity must be >= 1")
+
+    try:
+        events = search_events(args.query, user_agent=args.user_agent, timeout=args.timeout)
+    except GametimeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    if not events:
+        print(f"No events found for {args.query!r}.", file=sys.stderr)
+        return 1
+
+    sections_spec = _sections_spec(args)
+    all_results = []
+    any_matches = False
+
+    for ev in sorted(events, key=lambda x: x.datetime_local or ""):
+        try:
+            html = fetch_event_html(ev.id, user_agent=args.user_agent, timeout=args.timeout)
+            listings = parse_listings(html)
+            matches = filter_listings(
+                listings,
+                sections=sections_spec,
+                max_price_dollars=args.max_price,
+                quantity=args.quantity,
+                allow_larger=args.allow_larger,
+            )
+        except GametimeError as exc:
+            print(f"[warn] failed to scan {ev.id} ({ev.name}): {exc}", file=sys.stderr)
+            continue
+
+        if args.json:
+            all_results.append({
+                "event": {**ev.to_dict(), "url": ev.extra.get("url")},
+                "match_count": len(matches),
+                "matches": [m.to_dict() for m in matches],
+            })
+        else:
+            title = ev.name or ev.id
+            when = f" @ {ev.datetime_local}" if ev.datetime_local else ""
+            if matches:
+                any_matches = True
+                print(f"\n{title}{when} — {len(matches)} match(es):")
+                for l in matches:
+                    print("  " + _format_listing(l))
+            else:
+                print(f"\n{title}{when} — no matches")
+
+    if args.json:
+        any_matches = any(r["match_count"] > 0 for r in all_results)
+        payload = {
+            "query": args.query,
+            "criteria": _criteria_text(args),
+            "events_scanned": len(all_results),
+            "events_with_matches": sum(1 for r in all_results if r["match_count"] > 0),
+            "results": all_results,
+        }
+        print(json.dumps(payload, indent=2))
+
+    return 0 if any_matches else 1
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     raw = argv if argv is not None else sys.argv[1:]
-    # Dispatch to subcommand if first arg is 'search'.
+    # Dispatch to subcommands.
     if raw and raw[0] == "search":
         return _run_search(raw[1:])
+    if raw and raw[0] == "scan-all":
+        return _run_scan_all(raw[1:])
 
     parser = build_parser()
     args = parser.parse_args(argv)

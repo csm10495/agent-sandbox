@@ -43,6 +43,35 @@ page HTML. This tool:
 
 ## Usage
 
+### Scan all games for a team (search + filter in one command)
+
+```
+python -m gametime_watcher scan-all <query> [filter options] [--json]
+
+  <query>               Team or performer name (e.g. "Athletics")
+  -s, --sections SPEC   Section filter (may be repeated)
+  -p, --max-price N     Max all-in price PER TICKET, in dollars
+  -q, --quantity N      Seats wanted together (default 1)
+  --allow-larger        Also keep larger lots
+  --json                Output JSON instead of text
+```
+
+**Example: find all Athletics games with Solon Club tickets, 2 seats, under
+\$100 each:**
+
+```bash
+python -m gametime_watcher scan-all Athletics -s "Solon Club" -q 2 -p 100
+```
+
+```
+Los Angeles Angels at Athletics @ 2026-06-21T13:05:00 — 2 match(es):
+  $  95.00/tkt  sec   201 (Solon Club)  row   2  seats[1,2,3,4]  lots:2/4, face $144.50
+  $  98.00/tkt  sec   203 (Solon Club)  row   6  seats[5,6]  lots:2, face $170.00
+
+Athletics at Detroit Tigers @ 2026-07-07T18:40:00 — no matches
+...
+```
+
 ### Search for events (find game links)
 
 ```
@@ -66,15 +95,6 @@ Found 10 upcoming event(s) for 'Athletics':
   2026-06-19T18:40:00  Los Angeles Angels at Athletics  from $54
     https://gametime.co/events/68af5b71c814c51f4f8deba2
   ...
-```
-
-Pipe the event URLs into the watcher to scan all games for matching tickets:
-
-```bash
-# Search all Athletics home games for "Solon Club" seats under $100 each (2 tix)
-python -m gametime_watcher search Athletics --json \
-  | python -c "import json,sys; [print(e['url']) for e in json.load(sys.stdin)['events']]" \
-  | xargs -I{} python -m gametime_watcher {} -s "Solon Club" -q 2 -p 100
 ```
 
 ### Watch a single event
