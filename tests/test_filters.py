@@ -1,0 +1,124 @@
+"""Tests for section matching and listing filtering."""
+
+import pytest
+
+from gametime_watcher.filters import SectionMatcher, filter_listings
+from gametime_watcher.models import Listing
+
+
+def make(id, section, total, lots, group=None, row="1"):
+    return Listing(
+        id=id,
+        section=section,
+        section_group=group,
+        row=row,
+        seats=["1", "2"],
+        available_lots=lots,
+        price_total=total,
+        face_value=None,
+    )
+
+
+@pytest.fixture
+def listings():
+    return [
+        make("a", "117", 3800, [2], group="Field Level"),
+        make("b", "201", 10100, [2, 4], group="Solon Club"),
+        make("c", "203", 9500, [2], group="Solon Club"),
+        make("d", "119", 5000, [1, 2], group="Senate"),
+        make("e", "Lawn", 3000, [4], group="General Admission"),
+    ]
+
+
+# --- SectionMatcher ---------------------------------------------------------
+
+def test_empty_matcher_matches_all(listings):
+    m = SectionMatcher.parse(None)
+    assert m.is_empty
+    assert all(m.matches(l) for l in listings)
+
+
+def test_range_matches_numeric_sections(listings):
+    m = SectionMatcher.parse("200-299")
+    matched = {l.id for l in listings if m.matches(l)}
+    assert matched == {"b", "c"}
+
+
+def test_reversed_range_is_normalized(listings):
+    assert SectionMatcher.parse("299-200").matches(make("x", "250", 1, [2]))
+
+
+def test_exact_numeric_section(listings):
+    m = SectionMatcher.parse("119")
+    assert {l.id for l in listings if m.matches(l)} == {"d"}
+
+
+def test_group_name_is_case_insensitive_substring(listings):
+    m = SectionMatcher.parse("solon club")
+    assert {l.id for l in listings if m.matches(l)} == {"b", "c"}
+
+
+def test_name_token_matches_non_numeric_section_label(listings):
+    m = SectionMatcher.parse("Lawn")
+    assert {l.id for l in listings if m.matches(l)} == {"e"}
+
+
+def test_multiple_tokens_are_ored(listings):
+    m = SectionMatcher.parse("200-299, 117")
+    assert {l.id for l in listings if m.matches(l)} == {"a", "b", "c"}
+
+
+def test_parse_accepts_sequence_spec(listings):
+    m = SectionMatcher.parse(["200-299", "119"])
+    assert {l.id for l in listings if m.matches(l)} == {"b", "c", "d"}
+
+
+# --- can_buy ----------------------------------------------------------------
+
+def test_can_buy_requires_exact_lot():
+    l = make("x", "100", 1000, [4])
+    assert l.can_buy(4) is True
+    assert l.can_buy(2) is False
+
+
+def test_can_buy_allow_larger():
+    l = make("x", "100", 1000, [4])
+    assert l.can_buy(2, allow_larger=True) is True
+    assert l.can_buy(5, allow_larger=True) is False
+
+
+# --- filter_listings --------------------------------------------------------
+
+def test_filter_200s_two_seats_under_100(listings):
+    out = filter_listings(listings, sections="200-299", quantity=2, max_price_dollars=100)
+    # Only section 203 ($95) qualifies; 201 is $101.
+    assert [l.id for l in out] == ["c"]
+
+
+def test_filter_sorted_cheapest_first(listings):
+    out = filter_listings(listings, quantity=2)
+    # 'e' needs lot of 4, excluded; order by price: a(38), d(50), c(95), b(101)
+    assert [l.id for l in out] == ["a", "d", "c", "b"]
+
+
+def test_filter_quantity_excludes_unavailable_lot(listings):
+    out = filter_listings(listings, quantity=4)
+    # lots containing 4: b ([2,4]) and e ([4])
+    assert {l.id for l in out} == {"b", "e"}
+
+
+def test_filter_allow_larger(listings):
+    out = filter_listings(listings, sections="Lawn", quantity=2, allow_larger=True)
+    assert [l.id for l in out] == ["e"]
+
+
+def test_filter_max_price_boundary_inclusive(listings):
+    # 201 is exactly $101.00; threshold 101 keeps it, 100.99 drops it.
+    assert any(l.id == "b" for l in filter_listings(listings, max_price_dollars=101))
+    assert not any(l.id == "b" for l in filter_listings(listings, max_price_dollars=100.99))
+
+
+def test_filter_accepts_prebuilt_matcher(listings):
+    matcher = SectionMatcher.parse("200-299")
+    out = filter_listings(listings, sections=matcher, quantity=2)
+    assert {l.id for l in out} == {"b", "c"}

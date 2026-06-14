@@ -1,0 +1,133 @@
+# Gametime ticket-price watcher
+
+A small, **dependency-free** (standard-library only) Python tool that lists
+current [gametime.co](https://gametime.co) ticket prices for an event and alerts
+you when a desired number of seats in chosen sections drops below a target
+**per-ticket** price.
+
+It answers questions like:
+
+> *Tell me when **2 seats in the 200s** are available for **under \$100 each**
+> for [this game](https://gtix.co/ymvO3hz2xGfg).*
+
+```bash
+python -m gametime_watcher https://gtix.co/ymvO3hz2xGfg --sections 200-299 --quantity 2 --max-price 100
+```
+
+```
+Pittsburgh Pirates at Athletics @ 2026-06-17T18:40:00
+Criteria: 2 seat(s) in [200-299] <= $100.00/ticket
+Found 0 of 97 listings:
+```
+
+(At the time of writing the cheapest 2-seat pair in the 200s is \$101/ticket, so
+nothing matches yet — run it with `--watch` to be alerted when one drops below
+your threshold.)
+
+## How it works
+
+Gametime server-renders the full set of listings for an event into the event
+page HTML. This tool:
+
+1. Resolves an **event id** from whatever you give it — a short link
+   (`https://gtix.co/...`), a full event/listing URL, or a bare 24-character id.
+2. Downloads `https://gametime.co/events/<id>` (no API key required).
+3. Parses every listing's section, row, seats, purchasable lot sizes, and
+   **all-in per-ticket price** (the price shown on the site, fees included).
+4. Filters by your section / price / quantity criteria and prints the cheapest
+   matches first.
+
+> ⚠️ This reads Gametime's public web page. It's intended for personal use;
+> be respectful with polling intervals (the default is 5 minutes) and check
+> Gametime's Terms of Service. Page structure may change over time.
+
+## Usage
+
+```
+python -m gametime_watcher <event> [options]
+
+  <event>               Gametime event/listing URL, short link, or 24-char id
+
+  -s, --sections SPEC   Section filter. Comma-separated tokens, each one of:
+                          200-299        an inclusive numeric range
+                          119            an exact section
+                          "Solon Club"   a section-group / section name
+                        Default: all sections.
+  -p, --max-price N     Maximum all-in price PER TICKET, in dollars.
+  -q, --quantity N      Seats wanted together (default 1). Only listings that
+                        offer this exact lot size are kept.
+  --allow-larger        Also keep listings that only offer a larger lot.
+
+  --json                Emit JSON instead of text.
+  --watch               Poll repeatedly, alerting only on newly-seen matches.
+  --interval SECONDS    Polling interval for --watch (default 300).
+  --webhook URL         POST a JSON payload to URL on new matches.
+  --command CMD         Run CMD on new matches (JSON payload sent on stdin).
+
+  --user-agent UA       Override the HTTP User-Agent.
+  --timeout SECONDS     HTTP timeout (default 30).
+```
+
+The one-shot mode exits `0` when matches are found and `1` when none are, which
+makes it easy to drive from `cron` or shell scripts.
+
+### Examples
+
+Flexible by design — change sections and price freely:
+
+```bash
+# 4 seats in the lower bowl (sections 100-130) under $75 each
+python -m gametime_watcher 68af5b72c95bdeed8553f07f -s 100-130 -q 4 -p 75
+
+# Any 2 seats in a named club section
+python -m gametime_watcher <url> -s "Solon Club" -q 2
+
+# Mix ranges, exact sections, and names
+python -m gametime_watcher <url> -s "200-299,119,Field Level" -q 2 -p 120
+```
+
+Watch and get notified (every 2 minutes) via a webhook:
+
+```bash
+python -m gametime_watcher https://gtix.co/ymvO3hz2xGfg \
+  -s 200-299 -q 2 -p 100 \
+  --watch --interval 120 --webhook https://hooks.example.com/my-endpoint
+```
+
+Or run a local notifier on each new match (payload arrives on stdin):
+
+```bash
+python -m gametime_watcher <url> -s 200-299 -q 2 -p 100 \
+  --watch --command "python my_notifier.py"
+```
+
+## Library API
+
+```python
+from gametime_watcher import (
+    extract_event_id, fetch_event_html, parse_event, parse_listings,
+    filter_listings,
+)
+
+event_id = extract_event_id("https://gtix.co/ymvO3hz2xGfg")
+html = fetch_event_html(event_id)
+event = parse_event(html)
+listings = parse_listings(html)
+
+deals = filter_listings(listings, sections="200-299", quantity=2, max_price_dollars=100)
+for l in deals:
+    print(l.section, l.row, f"${l.price_total_dollars:.2f}/ticket", l.available_lots)
+```
+
+`Listing.price_total` is the all-in price **per ticket** in cents;
+`Listing.available_lots` lists the group sizes you may buy (e.g. `[2, 4]`).
+
+## Development
+
+```bash
+pip install pytest
+python -m pytest
+```
+
+Tests are fully offline: parsing and CLI tests run against
+`tests/fixtures/event_page.html`, and the network is stubbed in the CLI tests.
