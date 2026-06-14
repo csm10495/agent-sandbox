@@ -11,7 +11,16 @@ import time
 import urllib.request
 from typing import List, Optional, Union
 
-from .api import GametimeError, extract_event_id, fetch_event_html, parse_event, parse_listings, search_events
+from .api import (
+    GametimeError,
+    _resolve_performer_id,
+    extract_event_id,
+    fetch_event_html,
+    get_performer_events,
+    parse_event,
+    parse_listings,
+    search_events,
+)
 from .filters import SectionMatcher, filter_listings
 from .models import Event, Listing
 
@@ -111,6 +120,7 @@ def _build_search_parser() -> argparse.ArgumentParser:
         description="Search Gametime for events by team or performer name.",
     )
     p.add_argument("query", help="Team or performer to search for (e.g. 'Athletics').")
+    p.add_argument("--home-only", action="store_true", help="Show only home games.")
     p.add_argument("--json", action="store_true", help="Output JSON instead of text.")
     p.add_argument("--user-agent", default=None, help="Override the HTTP User-Agent.")
     p.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds.")
@@ -176,23 +186,38 @@ def _run_search(argv: List[str]) -> int:
         args.user_agent = DEFAULT_USER_AGENT
 
     try:
-        events = search_events(args.query, user_agent=args.user_agent, timeout=args.timeout)
+        # Resolve performer id so we can use the paginated endpoint that
+        # returns ALL events (the search endpoint only returns ~10).
+        performer_id = _resolve_performer_id(
+            args.query, user_agent=args.user_agent, timeout=args.timeout
+        )
+        if performer_id:
+            events = get_performer_events(
+                performer_id, user_agent=args.user_agent, timeout=args.timeout
+            )
+        else:
+            # Fallback to search if no performer match found
+            events = search_events(args.query, user_agent=args.user_agent, timeout=args.timeout)
     except GametimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+
+    if args.home_only:
+        events = [e for e in events if e.extra.get("is_home")]
 
     if args.json:
         payload = {
             "query": args.query,
             "event_count": len(events),
             "events": [
-                {**e.to_dict(), "url": e.extra.get("url"), "min_price_total_cents": e.extra.get("min_price_total")}
+                {**e.to_dict(), "url": e.extra.get("url"), "min_price_total_cents": e.extra.get("min_price_total"), "is_home": e.extra.get("is_home")}
                 for e in events
             ],
         }
         print(json.dumps(payload, indent=2))
     else:
-        print(f"Found {len(events)} upcoming event(s) for {args.query!r}:\n")
+        home_str = " home" if args.home_only else ""
+        print(f"Found {len(events)} upcoming{home_str} event(s) for {args.query!r}:\n")
         for e in sorted(events, key=lambda x: x.datetime_local or ""):
             min_p = e.extra.get("min_price_total")
             price_str = f"  from ${min_p / 100:.0f}" if min_p else ""
@@ -217,6 +242,7 @@ def _build_scan_all_parser() -> argparse.ArgumentParser:
     p.add_argument("-p", "--max-price", type=float, help="Max all-in price PER TICKET, in dollars.")
     p.add_argument("-q", "--quantity", type=int, default=1, help="Seats wanted together (default 1).")
     p.add_argument("--allow-larger", action="store_true", help="Also keep larger lots.")
+    p.add_argument("--home-only", action="store_true", help="Only scan home games.")
     p.add_argument("--json", action="store_true", help="Output JSON instead of text.")
     p.add_argument("--user-agent", default=None, help="Override the HTTP User-Agent.")
     p.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds.")
@@ -234,7 +260,16 @@ def _run_scan_all(argv: List[str]) -> int:
         parser.error("--quantity must be >= 1")
 
     try:
-        events = search_events(args.query, user_agent=args.user_agent, timeout=args.timeout)
+        # Use performer endpoint to get ALL events (not just ~10 from search)
+        performer_id = _resolve_performer_id(
+            args.query, user_agent=args.user_agent, timeout=args.timeout
+        )
+        if performer_id:
+            events = get_performer_events(
+                performer_id, user_agent=args.user_agent, timeout=args.timeout
+            )
+        else:
+            events = search_events(args.query, user_agent=args.user_agent, timeout=args.timeout)
     except GametimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -242,6 +277,12 @@ def _run_scan_all(argv: List[str]) -> int:
     if not events:
         print(f"No events found for {args.query!r}.", file=sys.stderr)
         return 1
+
+    if args.home_only:
+        events = [e for e in events if e.extra.get("is_home")]
+        if not events:
+            print(f"No home events found for {args.query!r}.", file=sys.stderr)
+            return 1
 
     sections_spec = _sections_spec(args)
     all_results = []
@@ -264,7 +305,7 @@ def _run_scan_all(argv: List[str]) -> int:
 
         if args.json:
             all_results.append({
-                "event": {**ev.to_dict(), "url": ev.extra.get("url")},
+                "event": {**ev.to_dict(), "url": ev.extra.get("url"), "is_home": ev.extra.get("is_home")},
                 "match_count": len(matches),
                 "matches": [m.to_dict() for m in matches],
             })

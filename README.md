@@ -46,21 +46,22 @@ page HTML. This tool:
 ### Scan all games for a team (search + filter in one command)
 
 ```
-python -m gametime_watcher scan-all <query> [filter options] [--json]
+python -m gametime_watcher scan-all <query> [filter options] [--home-only] [--json]
 
   <query>               Team or performer name (e.g. "Athletics")
   -s, --sections SPEC   Section filter (may be repeated)
   -p, --max-price N     Max all-in price PER TICKET, in dollars
   -q, --quantity N      Seats wanted together (default 1)
   --allow-larger        Also keep larger lots
+  --home-only           Only scan home games
   --json                Output JSON instead of text
 ```
 
-**Example: find all Athletics games with Solon Club tickets, 2 seats, under
+**Example: find all Athletics home games with Solon Club tickets, 2 seats, under
 \$100 each:**
 
 ```bash
-python -m gametime_watcher scan-all Athletics -s "Solon Club" -q 2 -p 100
+python -m gametime_watcher scan-all Athletics --home-only -s "Solon Club" -q 2 -p 100
 ```
 
 ```
@@ -75,25 +76,26 @@ Athletics at Detroit Tigers @ 2026-07-07T18:40:00 — no matches
 ### Search for events (find game links)
 
 ```
-python -m gametime_watcher search <query> [--json]
+python -m gametime_watcher search <query> [--home-only] [--json]
 
   <query>               Team or performer name (e.g. "Athletics")
+  --home-only           Show only home games
   --json                Output JSON instead of text
 ```
 
-Example: find all upcoming Athletics games:
+Example: find all upcoming Athletics home games:
 
 ```bash
-python -m gametime_watcher search Athletics
+python -m gametime_watcher search Athletics --home-only
 ```
 
 ```
-Found 10 upcoming event(s) for 'Athletics':
+Found 55 upcoming home event(s) for 'Athletics':
 
   2026-06-14T12:05:00  Colorado Rockies at Athletics  from $9
     https://gametime.co/events/68af57d5bf6276ee588dd924
-  2026-06-19T18:40:00  Los Angeles Angels at Athletics  from $54
-    https://gametime.co/events/68af5b71c814c51f4f8deba2
+  2026-06-15T18:40:00  Pittsburgh Pirates at Athletics  from $20
+    https://gametime.co/events/68af5b70f2def3b1e914a475
   ...
 ```
 

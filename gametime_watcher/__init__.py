@@ -9,12 +9,14 @@ Public API:
     fetch_event_html(event_id, ...)  -> str
     parse_event(html)                -> Event
     parse_listings(html)             -> list[Listing]
+    search_events(query, ...)        -> list[Event]
+    get_performer_events(id, ...)    -> list[Event]
     SectionMatcher.parse(spec)       -> SectionMatcher
     filter_listings(...)             -> list[Listing]
 """
 
 from .models import Event, Listing
-from .api import extract_event_id, fetch_event_html, parse_event, parse_listings, search_events
+from .api import extract_event_id, fetch_event_html, get_performer_events, parse_event, parse_listings, search_events
 from .filters import SectionMatcher, filter_listings
 
 __all__ = [
@@ -22,6 +24,7 @@ __all__ = [
     "Listing",
     "extract_event_id",
     "fetch_event_html",
+    "get_performer_events",
     "parse_event",
     "parse_listings",
     "search_events",

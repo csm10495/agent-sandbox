@@ -136,3 +136,166 @@ def test_search_events_parses_api_response(monkeypatch):
     assert results[0].datetime_local == "2026-07-01T19:00:00"
     assert results[0].extra["url"] == "https://gametime.co/events/abcdef1234567890abcdef12"
     assert results[0].extra["min_price_total"] == 1500
+
+
+# --- _resolve_performer_id (unit test with stubbed HTTP) --------------------
+
+def test_resolve_performer_id(monkeypatch):
+    from gametime_watcher import api
+    import json as _json
+
+    fake_response = {
+        "events": [],
+        "performers": [
+            {"performer": {"id": "perf123", "name": "Athletics"}},
+            {"performer": {"id": "perf456", "name": "World Athletics Championships"}},
+        ],
+        "venues": [],
+    }
+
+    class FakeResp:
+        def __init__(self):
+            self.headers = {}
+        def read(self):
+            return _json.dumps(fake_response).encode()
+        def geturl(self):
+            return "https://mobile.gametime.co/v1/search?q=Athletics"
+
+    monkeypatch.setattr(api, "_http_get", lambda *a, **k: FakeResp())
+
+    result = api._resolve_performer_id("Athletics")
+    assert result == "perf123"
+
+
+def test_resolve_performer_id_no_match(monkeypatch):
+    from gametime_watcher import api
+    import json as _json
+
+    fake_response = {"events": [], "performers": [], "venues": []}
+
+    class FakeResp:
+        def __init__(self):
+            self.headers = {}
+        def read(self):
+            return _json.dumps(fake_response).encode()
+        def geturl(self):
+            return "https://mobile.gametime.co/v1/search?q=Nope"
+
+    monkeypatch.setattr(api, "_http_get", lambda *a, **k: FakeResp())
+
+    result = api._resolve_performer_id("Nope")
+    assert result is None
+
+
+# --- get_performer_events (unit test with stubbed HTTP) ---------------------
+
+def test_get_performer_events_single_page(monkeypatch):
+    from gametime_watcher import api
+    import json as _json
+
+    fake_response = {
+        "events": [
+            {
+                "event": {
+                    "id": "evt111",
+                    "name": "Visitors at Home",
+                    "datetime_local": "2026-07-01T19:00:00",
+                    "venue_id": "ven111",
+                    "min_price": {"total": 2000},
+                    "performers": [
+                        {"id": "perf_home", "primary": True},
+                        {"id": "perf_away", "primary": False},
+                    ],
+                }
+            },
+            {
+                "event": {
+                    "id": "evt222",
+                    "name": "Home at Away",
+                    "datetime_local": "2026-07-05T19:00:00",
+                    "venue_id": "ven222",
+                    "min_price": {"total": 3000},
+                    "performers": [
+                        {"id": "perf_away2", "primary": True},
+                        {"id": "perf_home", "primary": False},
+                    ],
+                }
+            },
+        ],
+        "more": False,
+        "page": 1,
+        "per_page": 50,
+        "cursor": None,
+    }
+
+    class FakeResp:
+        def __init__(self):
+            self.headers = {}
+        def read(self):
+            return _json.dumps(fake_response).encode()
+        def geturl(self):
+            return "https://mobile.gametime.co/v1/events?performer_id=perf_home"
+
+    monkeypatch.setattr(api, "_http_get", lambda *a, **k: FakeResp())
+
+    results = api.get_performer_events("perf_home")
+    assert len(results) == 2
+    # First event: perf_home is primary -> is_home = True
+    assert results[0].extra["is_home"] is True
+    assert results[0].name == "Visitors at Home"
+    # Second event: perf_home is not primary -> is_home = False
+    assert results[1].extra["is_home"] is False
+    assert results[1].name == "Home at Away"
+
+
+def test_get_performer_events_pagination(monkeypatch):
+    from gametime_watcher import api
+    import json as _json
+
+    page1 = {
+        "events": [
+            {"event": {"id": "evt1", "name": "Game 1", "datetime_local": "2026-07-01T19:00:00",
+                       "venue_id": "v1", "min_price": {"total": 1000},
+                       "performers": [{"id": "p1", "primary": True}]}}
+        ],
+        "more": True,
+        "cursor": "cursor_abc",
+        "page": 1,
+        "per_page": 1,
+    }
+    page2 = {
+        "events": [
+            {"event": {"id": "evt2", "name": "Game 2", "datetime_local": "2026-07-02T19:00:00",
+                       "venue_id": "v2", "min_price": {"total": 2000},
+                       "performers": [{"id": "p1", "primary": True}]}}
+        ],
+        "more": False,
+        "cursor": None,
+        "page": 2,
+        "per_page": 1,
+    }
+
+    call_count = [0]
+
+    class FakeResp:
+        def __init__(self, data):
+            self._data = data
+            self.headers = {}
+        def read(self):
+            return _json.dumps(self._data).encode()
+        def geturl(self):
+            return ""
+
+    def fake_get(url, *a, **k):
+        call_count[0] += 1
+        if "cursor=cursor_abc" in url:
+            return FakeResp(page2)
+        return FakeResp(page1)
+
+    monkeypatch.setattr(api, "_http_get", fake_get)
+
+    results = api.get_performer_events("p1")
+    assert len(results) == 2
+    assert results[0].id == "evt1"
+    assert results[1].id == "evt2"
+    assert call_count[0] == 2  # Two pages fetched

@@ -119,6 +119,12 @@ def search_events(
 
     Returns a list of :class:`Event` objects with ``id``, ``name``,
     ``datetime_local``, and ``extra["url"]`` populated.
+
+    .. note::
+
+       The search endpoint only returns ~10 results. Use
+       :func:`get_performer_events` with a performer id to retrieve *all*
+       upcoming events for a team/performer.
     """
     url = f"https://mobile.gametime.co/v1/search?q={urllib.request.quote(query)}"
     try:
@@ -137,6 +143,12 @@ def search_events(
         ev = entry.get("event", entry)
         event_id = ev.get("id", "")
         event_url = f"https://gametime.co/events/{event_id}" if event_id else None
+        performers = ev.get("performers", [])
+        is_home = any(
+            p.get("primary", False)
+            for p in performers
+            if p.get("id") == _find_performer_id_in_entry(entry, query)
+        )
         results.append(
             Event(
                 id=event_id,
@@ -146,9 +158,126 @@ def search_events(
                 extra={
                     "url": event_url,
                     "min_price_total": ev.get("min_price", {}).get("total"),
+                    "is_home": is_home,
                 },
             )
         )
+    return results
+
+
+def _find_performer_id_in_entry(entry: dict, query: str) -> Optional[str]:
+    """Find the performer id matching *query* in a search result entry."""
+    for p in entry.get("performers", []):
+        name = p.get("name", "") or ""
+        if query.lower() in name.lower():
+            return p.get("id")
+    # Fall back to event-level performers list
+    ev = entry.get("event", entry)
+    for p in ev.get("performers", []):
+        # Performer entries at event level only have id+primary, no name
+        pass
+    return None
+
+
+def _resolve_performer_id(
+    query: str,
+    *,
+    user_agent: str = DEFAULT_USER_AGENT,
+    timeout: float = 30.0,
+) -> Optional[str]:
+    """Resolve a performer id from a search query.
+
+    Searches Gametime and returns the performer id whose name best matches
+    *query*, or ``None`` if no match is found.
+    """
+    url = f"https://mobile.gametime.co/v1/search?q={urllib.request.quote(query)}"
+    try:
+        resp = _http_get(url, user_agent, timeout)
+        body = _read_body(resp)
+    except urllib.error.URLError:  # pragma: no cover
+        return None
+
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        return None
+
+    for entry in data.get("performers", []):
+        p = entry.get("performer", entry)
+        name = p.get("name", "")
+        if query.lower() in name.lower():
+            return p.get("id")
+    return None
+
+
+def get_performer_events(
+    performer_id: str,
+    *,
+    user_agent: str = DEFAULT_USER_AGENT,
+    timeout: float = 30.0,
+) -> List[Event]:
+    """Fetch *all* upcoming events for a performer using the paginated API.
+
+    This uses the ``/v1/events?performer_id=`` endpoint which returns events
+    in pages and supports cursor-based pagination, ensuring all games are
+    returned (not just the first ~10 from the search endpoint).
+
+    Each returned :class:`Event` has ``extra["is_home"]`` set to ``True`` when
+    the performer is the primary (home) performer for that event.
+    """
+    results: List[Event] = []
+    cursor: Optional[str] = None
+    max_pages = 20  # Safety limit
+
+    for _ in range(max_pages):
+        url = f"https://mobile.gametime.co/v1/events?performer_id={performer_id}&per_page=50"
+        if cursor:
+            url += f"&cursor={cursor}"
+        try:
+            resp = _http_get(url, user_agent, timeout)
+            body = _read_body(resp)
+        except urllib.error.URLError as exc:  # pragma: no cover
+            raise GametimeError(
+                f"Failed to fetch events for performer {performer_id!r}: {exc}"
+            ) from exc
+
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise GametimeError(
+                f"Invalid response for performer {performer_id!r}: {exc}"
+            ) from exc
+
+        for entry in data.get("events", []):
+            ev = entry.get("event", entry)
+            event_id = ev.get("id", "")
+            event_url = f"https://gametime.co/events/{event_id}" if event_id else None
+            # Determine if this performer is the home (primary) team
+            performers = ev.get("performers", [])
+            is_home = any(
+                p.get("id") == performer_id and p.get("primary", False)
+                for p in performers
+            )
+            results.append(
+                Event(
+                    id=event_id,
+                    name=ev.get("name"),
+                    datetime_local=ev.get("datetime_local"),
+                    venue_id=ev.get("venue_id"),
+                    extra={
+                        "url": event_url,
+                        "min_price_total": ev.get("min_price", {}).get("total"),
+                        "is_home": is_home,
+                    },
+                )
+            )
+
+        if not data.get("more"):
+            break
+        cursor = data.get("cursor")
+        if not cursor:
+            break
+
     return results
 
 
