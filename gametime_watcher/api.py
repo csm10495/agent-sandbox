@@ -11,6 +11,7 @@ from __future__ import annotations
 import gzip
 import json
 import re
+import time
 import urllib.error
 import urllib.request
 from typing import List, Optional
@@ -94,19 +95,44 @@ def extract_event_id(
     raise GametimeError(f"Could not resolve an event id from {url_or_id!r}.")
 
 
+_RETRYABLE_HTTP_CODES = (502, 503, 504, 429)
+
+
 def fetch_event_html(
     event_id: str,
     *,
     user_agent: str = DEFAULT_USER_AGENT,
     timeout: float = 30.0,
+    retries: int = 3,
+    backoff_base: float = 1.0,
 ) -> str:
-    """Download the server-rendered event page HTML for ``event_id``."""
+    """Download the server-rendered event page HTML for ``event_id``.
+
+    Retries up to *retries* times with exponential backoff on transient HTTP
+    errors (502, 503, 504, 429).
+    """
     url = f"https://gametime.co/events/{event_id}"
-    try:
-        resp = _http_get(url, user_agent, timeout)
-        return _read_body(resp)
-    except urllib.error.URLError as exc:  # pragma: no cover - network failure path
-        raise GametimeError(f"Failed to fetch event page for {event_id!r}: {exc}") from exc
+    last_exc: Optional[Exception] = None
+    for attempt in range(1 + retries):
+        try:
+            resp = _http_get(url, user_agent, timeout)
+            return _read_body(resp)
+        except urllib.error.HTTPError as exc:
+            last_exc = exc
+            if exc.code in _RETRYABLE_HTTP_CODES and attempt < retries:
+                time.sleep(backoff_base * (2 ** attempt))
+                continue
+            raise GametimeError(
+                f"Failed to fetch event page for {event_id!r}: {exc}"
+            ) from exc
+        except urllib.error.URLError as exc:  # pragma: no cover - network failure path
+            raise GametimeError(
+                f"Failed to fetch event page for {event_id!r}: {exc}"
+            ) from exc
+    # Should not be reached, but just in case:
+    raise GametimeError(  # pragma: no cover
+        f"Failed to fetch event page for {event_id!r}: {last_exc}"
+    )
 
 
 def search_events(

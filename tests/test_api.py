@@ -299,3 +299,99 @@ def test_get_performer_events_pagination(monkeypatch):
     assert results[0].id == "evt1"
     assert results[1].id == "evt2"
     assert call_count[0] == 2  # Two pages fetched
+
+
+# --- fetch_event_html retry behavior ----------------------------------------
+
+def test_fetch_event_html_retries_on_502(monkeypatch):
+    """fetch_event_html retries on transient HTTP 502 and succeeds."""
+    from gametime_watcher import api
+    import urllib.error
+
+    call_count = [0]
+
+    class FakeResp:
+        def __init__(self):
+            self.headers = {}
+        def read(self):
+            return b"<html>OK</html>"
+        def geturl(self):
+            return ""
+
+    def fake_get(url, *a, **k):
+        call_count[0] += 1
+        if call_count[0] <= 2:
+            raise urllib.error.HTTPError(
+                url, 502, "Bad Gateway", {}, None
+            )
+        return FakeResp()
+
+    monkeypatch.setattr(api, "_http_get", fake_get)
+    monkeypatch.setattr(api.time, "sleep", lambda _: None)  # skip actual sleep
+
+    result = api.fetch_event_html("abc123def456abc123def456", retries=3, backoff_base=1.0)
+    assert result == "<html>OK</html>"
+    assert call_count[0] == 3  # 2 failures + 1 success
+
+
+def test_fetch_event_html_raises_after_all_retries_exhausted(monkeypatch):
+    """fetch_event_html raises GametimeError after all retries fail."""
+    from gametime_watcher import api
+    import urllib.error
+
+    call_count = [0]
+
+    def fake_get(url, *a, **k):
+        call_count[0] += 1
+        raise urllib.error.HTTPError(
+            url, 502, "Bad Gateway", {}, None
+        )
+
+    monkeypatch.setattr(api, "_http_get", fake_get)
+    monkeypatch.setattr(api.time, "sleep", lambda _: None)
+
+    with pytest.raises(GametimeError, match="502"):
+        api.fetch_event_html("abc123def456abc123def456", retries=3, backoff_base=1.0)
+    assert call_count[0] == 4  # 1 initial + 3 retries
+
+
+def test_fetch_event_html_no_retry_on_404(monkeypatch):
+    """fetch_event_html does NOT retry on non-retryable errors like 404."""
+    from gametime_watcher import api
+    import urllib.error
+
+    call_count = [0]
+
+    def fake_get(url, *a, **k):
+        call_count[0] += 1
+        raise urllib.error.HTTPError(
+            url, 404, "Not Found", {}, None
+        )
+
+    monkeypatch.setattr(api, "_http_get", fake_get)
+    monkeypatch.setattr(api.time, "sleep", lambda _: None)
+
+    with pytest.raises(GametimeError, match="404"):
+        api.fetch_event_html("abc123def456abc123def456", retries=3, backoff_base=1.0)
+    assert call_count[0] == 1  # No retries
+
+
+def test_fetch_event_html_exponential_backoff_delays(monkeypatch):
+    """Verify exponential backoff delays are correct."""
+    from gametime_watcher import api
+    import urllib.error
+
+    delays = []
+
+    def fake_get(url, *a, **k):
+        raise urllib.error.HTTPError(
+            url, 503, "Service Unavailable", {}, None
+        )
+
+    monkeypatch.setattr(api, "_http_get", fake_get)
+    monkeypatch.setattr(api.time, "sleep", lambda d: delays.append(d))
+
+    with pytest.raises(GametimeError):
+        api.fetch_event_html("abc123def456abc123def456", retries=3, backoff_base=2.0)
+    # Delays: 2*2^0=2, 2*2^1=4, 2*2^2=8
+    assert delays == [2.0, 4.0, 8.0]
