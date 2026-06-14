@@ -17,8 +17,8 @@ chosen sections drop below a per-ticket price. See `README.md` for usage.
   Gametime's mobile API), `get_performer_events` (paginated fetch of ALL events
   for a performer via `/v1/events?performer_id=`), and `_resolve_performer_id`
   (resolve a performer id from a search query).
-- `gametime_watcher/filters.py` — `SectionMatcher` (ranges / exact / group
-  names) and `filter_listings`.
+- `gametime_watcher/filters.py` — `SectionMatcher` (numeric ranges, alphabetic
+  ranges like `A-D`, exact sections, and group names) and `filter_listings`.
 - `gametime_watcher/cli.py` — argparse CLI with `search` subcommand, `scan-all`
   subcommand (uses paginated performer endpoint for all games, supports
   `--home-only`), one-shot + `--watch` polling, and webhook/command
