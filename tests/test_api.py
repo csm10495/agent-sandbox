@@ -94,3 +94,45 @@ def test_parse_listing_handles_non_numeric_section(html):
 
 def test_parse_empty_html_returns_no_listings():
     assert parse_listings("<html></html>") == []
+
+
+# --- search_events (unit test with stubbed HTTP) ----------------------------
+
+def test_search_events_parses_api_response(monkeypatch):
+    from gametime_watcher import api
+    import io
+    import json as _json
+
+    fake_response = {
+        "events": [
+            {
+                "event": {
+                    "id": "abcdef1234567890abcdef12",
+                    "name": "Team A at Team B",
+                    "datetime_local": "2026-07-01T19:00:00",
+                    "venue_id": "112233445566778899aabbcc",
+                    "min_price": {"total": 1500, "prefee": 1200},
+                }
+            }
+        ],
+        "performers": [],
+        "venues": [],
+    }
+
+    class FakeResp:
+        def __init__(self):
+            self.headers = {}
+        def read(self):
+            return _json.dumps(fake_response).encode()
+        def geturl(self):
+            return "https://mobile.gametime.co/v1/search?q=Team"
+
+    monkeypatch.setattr(api, "_http_get", lambda *a, **k: FakeResp())
+
+    results = api.search_events("Team")
+    assert len(results) == 1
+    assert results[0].id == "abcdef1234567890abcdef12"
+    assert results[0].name == "Team A at Team B"
+    assert results[0].datetime_local == "2026-07-01T19:00:00"
+    assert results[0].extra["url"] == "https://gametime.co/events/abcdef1234567890abcdef12"
+    assert results[0].extra["min_price_total"] == 1500

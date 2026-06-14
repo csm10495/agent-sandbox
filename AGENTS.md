@@ -12,12 +12,13 @@ chosen sections drop below a per-ticket price. See `README.md` for usage.
 
 - `gametime_watcher/models.py` — `Listing` and `Event` dataclasses. Prices are
   in **cents**; `Listing.price_total` is the all-in price **per ticket**.
-- `gametime_watcher/api.py` — resolve event id, fetch the event page, and parse
-  embedded listing/event JSON out of the server-rendered HTML.
+- `gametime_watcher/api.py` — resolve event id, fetch the event page, parse
+  embedded listing/event JSON, and `search_events` (team/performer search via
+  Gametime's mobile API).
 - `gametime_watcher/filters.py` — `SectionMatcher` (ranges / exact / group
   names) and `filter_listings`.
-- `gametime_watcher/cli.py` — argparse CLI, one-shot + `--watch` polling, and
-  webhook/command notifications.
+- `gametime_watcher/cli.py` — argparse CLI with `search` subcommand, one-shot +
+  `--watch` polling, and webhook/command notifications.
 - `tests/` — pytest suite; offline fixture at `tests/fixtures/event_page.html`.
 
 ## How data is obtained

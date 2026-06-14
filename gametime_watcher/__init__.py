@@ -14,7 +14,7 @@ Public API:
 """
 
 from .models import Event, Listing
-from .api import extract_event_id, fetch_event_html, parse_event, parse_listings
+from .api import extract_event_id, fetch_event_html, parse_event, parse_listings, search_events
 from .filters import SectionMatcher, filter_listings
 
 __all__ = [
@@ -24,6 +24,7 @@ __all__ = [
     "fetch_event_html",
     "parse_event",
     "parse_listings",
+    "search_events",
     "SectionMatcher",
     "filter_listings",
 ]

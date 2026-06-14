@@ -11,7 +11,7 @@ import time
 import urllib.request
 from typing import List, Optional, Union
 
-from .api import GametimeError, extract_event_id, fetch_event_html, parse_event, parse_listings
+from .api import GametimeError, extract_event_id, fetch_event_html, parse_event, parse_listings, search_events
 from .filters import SectionMatcher, filter_listings
 from .models import Event, Listing
 
@@ -105,13 +105,28 @@ def _notify(event: Optional[Event], matches: List[Listing], args) -> None:
         _run_command(args.command, payload)
 
 
+def _build_search_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="gametime_watcher search",
+        description="Search Gametime for events by team or performer name.",
+    )
+    p.add_argument("query", help="Team or performer to search for (e.g. 'Athletics').")
+    p.add_argument("--json", action="store_true", help="Output JSON instead of text.")
+    p.add_argument("--user-agent", default=None, help="Override the HTTP User-Agent.")
+    p.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout in seconds.")
+    return p
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="gametime_watcher",
         description=(
             "List current Gametime ticket prices for an event and alert when "
-            "seats in chosen sections drop below a per-ticket price."
+            "seats in chosen sections drop below a per-ticket price.\n\n"
+            "Use 'gametime_watcher search <query>' to find event links by "
+            "team or performer name."
         ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("event", help="Gametime event/listing URL, short link, or 24-char event id")
     p.add_argument(
@@ -152,7 +167,46 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _run_search(argv: List[str]) -> int:
+    """Handle the ``search`` subcommand."""
+    parser = _build_search_parser()
+    args = parser.parse_args(argv)
+    if args.user_agent is None:
+        from .api import DEFAULT_USER_AGENT
+        args.user_agent = DEFAULT_USER_AGENT
+
+    try:
+        events = search_events(args.query, user_agent=args.user_agent, timeout=args.timeout)
+    except GametimeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    if args.json:
+        payload = {
+            "query": args.query,
+            "event_count": len(events),
+            "events": [
+                {**e.to_dict(), "url": e.extra.get("url"), "min_price_total_cents": e.extra.get("min_price_total")}
+                for e in events
+            ],
+        }
+        print(json.dumps(payload, indent=2))
+    else:
+        print(f"Found {len(events)} upcoming event(s) for {args.query!r}:\n")
+        for e in sorted(events, key=lambda x: x.datetime_local or ""):
+            min_p = e.extra.get("min_price_total")
+            price_str = f"  from ${min_p / 100:.0f}" if min_p else ""
+            print(f"  {e.datetime_local or '???':>19}  {e.name or '?'}{price_str}")
+            print(f"    {e.extra.get('url', '')}")
+    return 0 if events else 1
+
+
 def main(argv: Optional[List[str]] = None) -> int:
+    raw = argv if argv is not None else sys.argv[1:]
+    # Dispatch to subcommand if first arg is 'search'.
+    if raw and raw[0] == "search":
+        return _run_search(raw[1:])
+
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.user_agent is None:

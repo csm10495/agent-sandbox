@@ -109,6 +109,49 @@ def fetch_event_html(
         raise GametimeError(f"Failed to fetch event page for {event_id!r}: {exc}") from exc
 
 
+def search_events(
+    query: str,
+    *,
+    user_agent: str = DEFAULT_USER_AGENT,
+    timeout: float = 30.0,
+) -> List[Event]:
+    """Search Gametime for upcoming events matching ``query`` (e.g. a team name).
+
+    Returns a list of :class:`Event` objects with ``id``, ``name``,
+    ``datetime_local``, and ``extra["url"]`` populated.
+    """
+    url = f"https://mobile.gametime.co/v1/search?q={urllib.request.quote(query)}"
+    try:
+        resp = _http_get(url, user_agent, timeout)
+        body = _read_body(resp)
+    except urllib.error.URLError as exc:  # pragma: no cover - network failure path
+        raise GametimeError(f"Search request failed for {query!r}: {exc}") from exc
+
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise GametimeError(f"Invalid search response for {query!r}: {exc}") from exc
+
+    results: List[Event] = []
+    for entry in data.get("events", []):
+        ev = entry.get("event", entry)
+        event_id = ev.get("id", "")
+        event_url = f"https://gametime.co/events/{event_id}" if event_id else None
+        results.append(
+            Event(
+                id=event_id,
+                name=ev.get("name"),
+                datetime_local=ev.get("datetime_local"),
+                venue_id=ev.get("venue_id"),
+                extra={
+                    "url": event_url,
+                    "min_price_total": ev.get("min_price", {}).get("total"),
+                },
+            )
+        )
+    return results
+
+
 def _find_string(blob: str, key: str) -> Optional[str]:
     m = re.search(r'"%s":"((?:[^"\\]|\\.)*)"' % re.escape(key), blob)
     if not m:

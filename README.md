@@ -43,6 +43,42 @@ page HTML. This tool:
 
 ## Usage
 
+### Search for events (find game links)
+
+```
+python -m gametime_watcher search <query> [--json]
+
+  <query>               Team or performer name (e.g. "Athletics")
+  --json                Output JSON instead of text
+```
+
+Example: find all upcoming Athletics games:
+
+```bash
+python -m gametime_watcher search Athletics
+```
+
+```
+Found 10 upcoming event(s) for 'Athletics':
+
+  2026-06-14T12:05:00  Colorado Rockies at Athletics  from $9
+    https://gametime.co/events/68af57d5bf6276ee588dd924
+  2026-06-19T18:40:00  Los Angeles Angels at Athletics  from $54
+    https://gametime.co/events/68af5b71c814c51f4f8deba2
+  ...
+```
+
+Pipe the event URLs into the watcher to scan all games for matching tickets:
+
+```bash
+# Search all Athletics home games for "Solon Club" seats under $100 each (2 tix)
+python -m gametime_watcher search Athletics --json \
+  | python -c "import json,sys; [print(e['url']) for e in json.load(sys.stdin)['events']]" \
+  | xargs -I{} python -m gametime_watcher {} -s "Solon Club" -q 2 -p 100
+```
+
+### Watch a single event
+
 ```
 python -m gametime_watcher <event> [options]
 
@@ -107,16 +143,22 @@ python -m gametime_watcher <url> -s 200-299 -q 2 -p 100 \
 
 ```python
 from gametime_watcher import (
-    extract_event_id, fetch_event_html, parse_event, parse_listings,
-    filter_listings,
+    search_events, extract_event_id, fetch_event_html,
+    parse_event, parse_listings, filter_listings,
 )
 
+# Find all upcoming Athletics games
+events = search_events("Athletics")
+for ev in events:
+    print(ev.name, ev.datetime_local, ev.extra["url"])
+
+# Then check a specific event for deals
 event_id = extract_event_id("https://gtix.co/ymvO3hz2xGfg")
 html = fetch_event_html(event_id)
 event = parse_event(html)
 listings = parse_listings(html)
 
-deals = filter_listings(listings, sections="200-299", quantity=2, max_price_dollars=100)
+deals = filter_listings(listings, sections="Solon Club", quantity=2, max_price_dollars=100)
 for l in deals:
     print(l.section, l.row, f"${l.price_total_dollars:.2f}/ticket", l.available_lots)
 ```
