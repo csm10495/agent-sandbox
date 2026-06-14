@@ -122,3 +122,48 @@ def test_filter_accepts_prebuilt_matcher(listings):
     matcher = SectionMatcher.parse("200-299")
     out = filter_listings(listings, sections=matcher, quantity=2)
     assert {l.id for l in out} == {"b", "c"}
+
+
+# --- Alphabetic range matching -----------------------------------------------
+
+def test_alpha_range_matches_letter_sections():
+    a = make("a", "A", 1000, [2])
+    b = make("b", "B", 1000, [2])
+    c = make("c", "C", 1000, [2])
+    d = make("d", "D", 1000, [2])
+    e = make("e", "E", 1000, [2])
+    num = make("n", "117", 1000, [2])
+    m = SectionMatcher.parse("A-D")
+    assert {l.id for l in [a, b, c, d, e, num] if m.matches(l)} == {"a", "b", "c", "d"}
+
+
+def test_alpha_range_case_insensitive():
+    lower = make("lo", "b", 1000, [2])
+    upper = make("up", "B", 1000, [2])
+    m = SectionMatcher.parse("a-d")
+    assert m.matches(lower)
+    assert m.matches(upper)
+
+
+def test_alpha_range_reversed_is_normalized():
+    c = make("c", "C", 1000, [2])
+    m = SectionMatcher.parse("D-A")
+    assert m.matches(c)
+
+
+def test_alpha_range_single_letter():
+    a = make("a", "A", 1000, [2])
+    b = make("b", "B", 1000, [2])
+    m = SectionMatcher.parse("A-A")
+    assert m.matches(a)
+    assert not m.matches(b)
+
+
+def test_alpha_range_combined_with_numeric():
+    a = make("a", "A", 1000, [2])
+    s117 = make("s", "117", 1000, [2])
+    s200 = make("s2", "200", 1000, [2])
+    m = SectionMatcher.parse("A-C, 200-299")
+    assert m.matches(a)
+    assert not m.matches(s117)
+    assert m.matches(s200)

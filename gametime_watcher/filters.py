@@ -28,6 +28,18 @@ class _Exact:
 
 
 @dataclass
+class _AlphaRange:
+    low: str
+    high: str
+
+    def matches(self, listing: Listing) -> bool:
+        s = listing.section.strip().upper()
+        if len(s) != 1 or not s.isalpha():
+            return False
+        return self.low <= s <= self.high
+
+
+@dataclass
 class _Name:
     text: str
 
@@ -40,6 +52,7 @@ class _Name:
 
 
 _RANGE_RE = re.compile(r"^\s*(\d+)\s*-\s*(\d+)\s*$")
+_ALPHA_RANGE_RE = re.compile(r"^\s*([A-Za-z])\s*-\s*([A-Za-z])\s*$")
 
 
 class SectionMatcher:
@@ -77,6 +90,13 @@ class SectionMatcher:
                 if low > high:
                     low, high = high, low
                 matchers.append(_Range(low, high))
+                continue
+            alpha_rng = _ALPHA_RANGE_RE.match(token)
+            if alpha_rng:
+                low, high = alpha_rng.group(1).upper(), alpha_rng.group(2).upper()
+                if low > high:
+                    low, high = high, low
+                matchers.append(_AlphaRange(low, high))
             elif token.isdigit():
                 matchers.append(_Exact(int(token)))
             else:
