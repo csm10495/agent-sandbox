@@ -144,10 +144,11 @@ def search_events(
         event_id = ev.get("id", "")
         event_url = f"https://gametime.co/events/{event_id}" if event_id else None
         performers = ev.get("performers", [])
-        is_home = any(
+        matched_id = _find_performer_id_in_entry(entry, query)
+        is_home = bool(matched_id) and any(
             p.get("primary", False)
             for p in performers
-            if p.get("id") == _find_performer_id_in_entry(entry, query)
+            if p.get("id") == matched_id
         )
         results.append(
             Event(
@@ -171,11 +172,6 @@ def _find_performer_id_in_entry(entry: dict, query: str) -> Optional[str]:
         name = p.get("name", "") or ""
         if query.lower() in name.lower():
             return p.get("id")
-    # Fall back to event-level performers list
-    ev = entry.get("event", entry)
-    for p in ev.get("performers", []):
-        # Performer entries at event level only have id+primary, no name
-        pass
     return None
 
 
