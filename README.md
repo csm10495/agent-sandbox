@@ -1,5 +1,7 @@
 # Gametime ticket-price watcher
 
+> **Note:** This project was primarily generated and maintained with the assistance of AI (GitHub Copilot).
+
 A small, **dependency-free** (standard-library only) Python tool that lists
 current [gametime.co](https://gametime.co) ticket prices for an event and alerts
 you when a desired number of seats in chosen sections drops below a target

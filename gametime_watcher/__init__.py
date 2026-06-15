@@ -1,3 +1,5 @@
+__version__ = "0.0.0"
+
 """Gametime ticket-price watcher.
 
 A small, dependency-free toolkit for listing current Gametime ticket prices for
