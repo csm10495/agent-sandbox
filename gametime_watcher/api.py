@@ -108,8 +108,8 @@ def fetch_event_html(
 ) -> str:
     """Download the server-rendered event page HTML for ``event_id``.
 
-    Retries up to *retries* times with exponential backoff on transient HTTP
-    errors (502, 503, 504, 429).
+    Makes up to *retries* additional attempts with exponential backoff on
+    transient HTTP errors (502, 503, 504, 429).
     """
     url = f"https://gametime.co/events/{event_id}"
     last_exc: Optional[Exception] = None
