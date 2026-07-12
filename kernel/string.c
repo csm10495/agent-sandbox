@@ -13,6 +13,17 @@ void *memset(void *dst, int value, size_t n) {
     return dst;
 }
 
+int memcmp(const void *a, const void *b, size_t n) {
+    const unsigned char *left = a;
+    const unsigned char *right = b;
+    while (n--) {
+        if (*left != *right) return *left - *right;
+        left++;
+        right++;
+    }
+    return 0;
+}
+
 size_t strlen(const char *s) {
     size_t n = 0;
     while (s[n]) n++;

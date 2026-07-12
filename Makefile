@@ -39,7 +39,7 @@ run: iso
 	qemu-system-x86_64 -cdrom $(BUILD)/sableos.iso -smp 4 -m 128M -serial stdio
 
 test:
-	$(CC) -std=c11 -Wall -Wextra -Werror -O2 -Iinclude tests/unit.c kernel/string.c kernel/ramfs.c -o $(BUILD)/unit-tests
+	$(CC) -std=c11 -Wall -Wextra -Werror -O2 -fno-builtin -Iinclude tests/unit.c kernel/string.c kernel/ramfs.c -o $(BUILD)/unit-tests
 	$(BUILD)/unit-tests
 
 functional-test: iso
