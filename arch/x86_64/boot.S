@@ -17,7 +17,7 @@ pml4:
 pdp:
     .skip 4096
 pd:
-    .skip 4096
+    .skip 16384
 .align 16
 boot_stack_bottom:
     .skip 32768
@@ -49,9 +49,16 @@ _start:
     mov $pdp, %eax
     or $3, %eax
     mov %eax, pml4
-    mov $pd, %eax
+    xor %ecx, %ecx
+0:
+    mov %ecx, %eax
+    shl $12, %eax
+    add $pd, %eax
     or $3, %eax
-    mov %eax, pdp
+    mov %eax, pdp(,%ecx,8)
+    inc %ecx
+    cmp $4, %ecx
+    jne 0b
 
     xor %ecx, %ecx
 1:
@@ -60,7 +67,7 @@ _start:
     or $0x83, %eax
     mov %eax, pd(,%ecx,8)
     inc %ecx
-    cmp $512, %ecx
+    cmp $2048, %ecx
     jne 1b
 
     mov %cr4, %eax

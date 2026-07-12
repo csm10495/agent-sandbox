@@ -1,6 +1,7 @@
 #include "kernel.h"
 
 static uint32_t detected_cpus;
+static uint32_t online_cpus;
 
 static void worker(void) {
     for (;;) {
@@ -58,6 +59,8 @@ static void execute(char *line) {
     } else if (strcmp(line, "cpuinfo") == 0) {
         console_write("amd64 CPUs discovered through ACPI MADT: ");
         console_write_dec(detected_cpus);
+        console_write(", online: ");
+        console_write_dec(online_cpus);
         console_putc('\n');
     } else if (strcmp(line, "ps") == 0) {
         for (size_t i = 0; i < thread_count(); i++) {
@@ -111,12 +114,15 @@ void kernel_main(uint32_t multiboot_info) {
     console_write("Initializing ACPI, LAPIC, threads, ramfs, and terminal...\n");
     detected_cpus = cpu_discover();
     cpu_enable_lapic();
+    online_cpus = cpu_start_aps();
     ramfs_init();
     threads_init();
     thread_create("idle-worker", worker);
     keyboard_init();
     console_write("Ready. ");
     console_write_dec(detected_cpus);
-    console_write(" CPU(s) discovered. Type 'help'.\n\n");
+    console_write(" CPU(s) discovered, ");
+    console_write_dec(online_cpus);
+    console_write(" online. Type 'help'.\n\n");
     shell();
 }

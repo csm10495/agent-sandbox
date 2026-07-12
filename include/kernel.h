@@ -50,6 +50,7 @@ const char *thread_name(size_t index);
 
 uint32_t cpu_discover(void);
 void cpu_enable_lapic(void);
+uint32_t cpu_start_aps(void);
 
 static inline void outb(uint16_t port, uint8_t value) {
     __asm__ volatile("outb %0, %1" : : "a"(value), "Nd"(port));

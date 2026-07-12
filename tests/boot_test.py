@@ -22,7 +22,7 @@ except subprocess.TimeoutExpired as error:
 else:
     output = result.stdout
 
-required = ["SableOS 0.1", "Ready.", "CPU(s) discovered", "sable:/$"]
+required = ["SableOS 0.1", "Ready. 2 CPU(s) discovered, 2 online", "sable:/$"]
 missing = [text for text in required if text not in output]
 if missing:
     print(output)

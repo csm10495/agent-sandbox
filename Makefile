@@ -4,9 +4,10 @@ BUILD := build
 ISO_ROOT := $(BUILD)/iso
 CFLAGS := -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mgeneral-regs-only \
 	-Wall -Wextra -Werror -O2 -Iinclude
-LDFLAGS := -nostdlib -z max-page-size=0x1000 -T linker.ld
+LDFLAGS := -nostdlib -z max-page-size=0x1000 -z noexecstack -T linker.ld
 SOURCES := $(wildcard kernel/*.c)
-OBJECTS := $(patsubst kernel/%.c,$(BUILD)/%.o,$(SOURCES)) $(BUILD)/boot.o $(BUILD)/context.o
+OBJECTS := $(patsubst kernel/%.c,$(BUILD)/%.o,$(SOURCES)) $(BUILD)/boot.o $(BUILD)/context.o \
+	$(BUILD)/ap_trampoline_blob.o
 
 .PHONY: all iso run test functional-test clean
 
@@ -23,6 +24,18 @@ $(BUILD)/boot.o: arch/x86_64/boot.S | $(BUILD)
 
 $(BUILD)/context.o: arch/x86_64/context.S | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ap_trampoline.o: arch/x86_64/ap_trampoline.S | $(BUILD)
+	$(CC) -m64 -c $< -o $@
+
+$(BUILD)/ap_trampoline.elf: $(BUILD)/ap_trampoline.o arch/x86_64/ap_linker.ld
+	$(LD) -nostdlib -T arch/x86_64/ap_linker.ld $< -o $@
+
+$(BUILD)/ap_trampoline.bin: $(BUILD)/ap_trampoline.elf
+	objcopy -O binary $< $@
+
+$(BUILD)/ap_trampoline_blob.o: $(BUILD)/ap_trampoline.bin
+	cd $(BUILD) && $(LD) -r -b binary ap_trampoline.bin -o ap_trampoline_blob.o
 
 $(BUILD)/kernel.elf: $(OBJECTS) linker.ld
 	$(LD) $(LDFLAGS) $(OBJECTS) -o $@
