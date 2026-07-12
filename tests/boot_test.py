@@ -3,7 +3,7 @@ import shutil
 import subprocess
 import sys
 
-BOOT_TIMEOUT_SECONDS = 12
+BOOT_TIMEOUT = 12
 
 if len(sys.argv) != 2:
     raise SystemExit("usage: boot_test.py ISO")
@@ -17,7 +17,7 @@ command = [
 try:
     result = subprocess.run(command, text=True, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT,
-                            timeout=BOOT_TIMEOUT_SECONDS, check=False)
+                            timeout=BOOT_TIMEOUT, check=False)
 except subprocess.TimeoutExpired as error:
     output = error.stdout or ""
     if isinstance(output, bytes):

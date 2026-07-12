@@ -36,7 +36,10 @@ static uint32_t apic_count;
 static volatile uint32_t online_cpus = 1;
 static uint8_t ap_stacks[255][4096] __attribute__((aligned(16)));
 
-#define APIC_FLAGS_USABLE 3u
+#define ACPI_MADT_ENABLED (1u << 0)
+#define ACPI_MADT_ONLINE_CAPABLE (1u << 1)
+#define APIC_FLAGS_USABLE (ACPI_MADT_ENABLED | ACPI_MADT_ONLINE_CAPABLE)
+/* INIT uses level-triggered assert/deassert; SIPI selects page 0x8000. */
 #define IPI_INIT_ASSERT 0x0000c500u
 #define IPI_INIT_DEASSERT 0x00008500u
 #define IPI_STARTUP_VECTOR_8 0x00004608u

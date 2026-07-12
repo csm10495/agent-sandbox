@@ -2,6 +2,7 @@
 
 #define MAX_THREADS 8
 #define STACK_SIZE 8192
+#define CONTEXT_SAVED_REGISTERS 6
 
 typedef struct {
     uint64_t rsp;
@@ -36,7 +37,7 @@ int thread_create(const char *name, void (*entry)(void)) {
     uint64_t *sp = (uint64_t *)top;
     *--sp = (uint64_t)thread_exit;
     *--sp = (uint64_t)entry;
-    for (int i = 0; i < 6; i++) *--sp = 0;
+    for (int i = 0; i < CONTEXT_SAVED_REGISTERS; i++) *--sp = 0;
     threads[id].rsp = (uint64_t)sp;
     threads[id].name = name;
     threads[id].active = true;
