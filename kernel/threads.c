@@ -45,9 +45,14 @@ int thread_create(const char *name, void (*entry)(void)) {
 
 void thread_yield(void) {
     size_t next = current;
-    do {
+    size_t checked = 0;
+    while (checked++ < count) {
         next = (next + 1) % count;
-    } while (!threads[next].active && next != current);
+        if (threads[next].active) break;
+    }
+    if (!threads[next].active) {
+        for (;;) __asm__ volatile("cli; hlt");
+    }
     if (next == current) return;
     size_t old = current;
     current = next;

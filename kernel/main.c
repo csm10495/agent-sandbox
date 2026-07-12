@@ -97,7 +97,7 @@ static void shell(void) {
                     length--;
                     console_putc(c);
                 }
-            } else if (c >= ' ' && length + 1 < sizeof(line)) {
+            } else if (c >= ' ' && length < sizeof(line) - 1) {
                 line[length++] = c;
                 console_putc(c);
             }

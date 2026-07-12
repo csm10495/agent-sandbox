@@ -1,5 +1,7 @@
 #include "kernel.h"
 
+#define KEY_RELEASE_BIT 0x80u
+
 static const char keymap[128] = {
     0, 27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
     '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n', 0,
@@ -15,7 +17,7 @@ char keyboard_read(void) {
     for (;;) {
         if (inb(0x64) & 1) {
             uint8_t code = inb(0x60);
-            if (!(code & 0x80) && code < sizeof(keymap) && keymap[code])
+            if (!(code & KEY_RELEASE_BIT) && code < sizeof(keymap) && keymap[code])
                 return keymap[code];
         }
         __asm__ volatile("pause");

@@ -36,6 +36,11 @@ static uint32_t apic_count;
 static volatile uint32_t online_cpus = 1;
 static uint8_t ap_stacks[255][4096] __attribute__((aligned(16)));
 
+#define APIC_FLAGS_USABLE 3u
+#define IPI_INIT_ASSERT 0x0000c500u
+#define IPI_INIT_DEASSERT 0x00008500u
+#define IPI_STARTUP_VECTOR_8 0x00004608u
+
 static bool checksum_ok(const void *data, size_t length) {
     const uint8_t *p = data;
     uint8_t sum = 0;
@@ -72,7 +77,8 @@ uint32_t cpu_discover(void) {
         if (p[0] == 0 && p[1] >= 8) {
             uint32_t flags;
             memcpy(&flags, p + 4, sizeof(flags));
-            if ((flags & 3) && apic_count < sizeof(apic_ids)) apic_ids[apic_count++] = p[3];
+            if ((flags & APIC_FLAGS_USABLE) && apic_count < sizeof(apic_ids))
+                apic_ids[apic_count++] = p[3];
         }
         p += p[1];
     }
@@ -123,13 +129,13 @@ uint32_t cpu_start_aps(void) {
         *(volatile uint64_t *)0x8f08 =
             (uint64_t)(uintptr_t)&ap_stacks[stack_index++][sizeof(ap_stacks[0])];
         *(volatile uint64_t *)0x8f10 = (uint64_t)(uintptr_t)ap_entry;
-        lapic_send(apic_ids[i], 0x0000c500);
+        lapic_send(apic_ids[i], IPI_INIT_ASSERT);
         delay();
-        lapic_send(apic_ids[i], 0x00008500);
+        lapic_send(apic_ids[i], IPI_INIT_DEASSERT);
         delay();
-        lapic_send(apic_ids[i], 0x00004608);
+        lapic_send(apic_ids[i], IPI_STARTUP_VECTOR_8);
         delay();
-        lapic_send(apic_ids[i], 0x00004608);
+        lapic_send(apic_ids[i], IPI_STARTUP_VECTOR_8);
         delay();
     }
     for (uint32_t wait = 0; wait < 1000000 && online_cpus < apic_count; wait++)

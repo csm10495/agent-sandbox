@@ -3,6 +3,8 @@ import shutil
 import subprocess
 import sys
 
+BOOT_TIMEOUT_SECONDS = 12
+
 if len(sys.argv) != 2:
     raise SystemExit("usage: boot_test.py ISO")
 if not shutil.which("qemu-system-x86_64"):
@@ -14,7 +16,8 @@ command = [
 ]
 try:
     result = subprocess.run(command, text=True, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, timeout=12, check=False)
+                            stderr=subprocess.STDOUT,
+                            timeout=BOOT_TIMEOUT_SECONDS, check=False)
 except subprocess.TimeoutExpired as error:
     output = error.stdout or ""
     if isinstance(output, bytes):
