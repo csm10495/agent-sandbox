@@ -2,7 +2,7 @@ CC := gcc
 LD := ld
 BUILD := build
 ISO_ROOT := $(BUILD)/iso
-CFLAGS := -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone \
+CFLAGS := -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mgeneral-regs-only \
 	-Wall -Wextra -Werror -O2 -Iinclude
 LDFLAGS := -nostdlib -z max-page-size=0x1000 -T linker.ld
 SOURCES := $(wildcard kernel/*.c)
@@ -38,7 +38,7 @@ iso: $(BUILD)/kernel.elf grub/grub.cfg
 run: iso
 	qemu-system-x86_64 -cdrom $(BUILD)/sableos.iso -smp 4 -m 128M -serial stdio
 
-test:
+test: | $(BUILD)
 	$(CC) -std=c11 -Wall -Wextra -Werror -O2 -fno-builtin -Iinclude tests/unit.c kernel/string.c kernel/ramfs.c -o $(BUILD)/unit-tests
 	$(BUILD)/unit-tests
 
