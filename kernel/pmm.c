@@ -85,4 +85,38 @@ void pmm_reserve(uintptr_t start, uintptr_t end) {
     }
 }
 
+/* Allocate a run of physically contiguous, zeroed frames spanning at least
+ * `bytes`. Returns the base physical address (identity-mapped in every address
+ * space) or 0. Used to stage a boot module into the pool so it stays readable
+ * after a process CR3 is installed. */
+uintptr_t pmm_alloc_contiguous(size_t bytes) {
+    if (bytes == 0 || !pool_frames) return 0;
+    size_t need = (bytes + FRAME_SIZE - 1) / FRAME_SIZE;
+    for (size_t start = 0; start + need <= pool_frames;) {
+        size_t run = 0;
+        while (run < need && !bitmap_test(start + run)) run++;
+        if (run == need) {
+            for (size_t i = 0; i < need; i++) bitmap_set(start + i);
+            free_frames -= need;
+            uintptr_t base = pool_base + (uintptr_t)start * FRAME_SIZE;
+            memset((void *)base, 0, need * FRAME_SIZE);
+            return base;
+        }
+        start += run + 1; /* skip past the used frame that broke the run */
+    }
+    return 0;
+}
+
+void pmm_free_contiguous(uintptr_t base, size_t bytes) {
+    if (base < pool_base || bytes == 0) return;
+    size_t first = (size_t)((base - pool_base) / FRAME_SIZE);
+    size_t frames = (bytes + FRAME_SIZE - 1) / FRAME_SIZE;
+    for (size_t i = 0; i < frames && first + i < pool_frames; i++) {
+        if (bitmap_test(first + i)) {
+            bitmap_clear(first + i);
+            free_frames++;
+        }
+    }
+}
+
 size_t pmm_free_count(void) { return free_frames; }

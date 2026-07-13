@@ -38,8 +38,10 @@
 #define SYS_execve 59
 #define SYS_exit 60
 #define SYS_wait4 61
+#define SYS_kill 62
 #define SYS_uname 63
 #define SYS_fcntl 72
+#define SYS_getcwd 79
 #define SYS_readlink 89
 #define SYS_sigaltstack 131
 #define SYS_getuid 102
@@ -52,9 +54,11 @@
 #define SYS_prctl 157
 #define SYS_arch_prctl 158
 #define SYS_gettid 186
+#define SYS_tkill 200
 #define SYS_set_tid_address 218
 #define SYS_clock_gettime 228
 #define SYS_exit_group 231
+#define SYS_tgkill 234
 #define SYS_openat 257
 #define SYS_newfstatat 262
 #define SYS_readlinkat 267
@@ -299,6 +303,13 @@ static long do_getrandom(uint8_t *buf, size_t len) {
     return (long)len;
 }
 
+static long do_getcwd(char *buf, size_t size) {
+    if (!buf || size < 2) return -EINVAL;
+    buf[0] = '/';
+    buf[1] = 0;
+    return 2; /* Linux returns the length of the path including the NUL. */
+}
+
 static long do_arch_prctl(int code, uintptr_t addr) {
     if (code == ARCH_SET_FS) {
         __asm__ volatile("wrmsr" : : "c"(0xc0000100), "a"((uint32_t)addr),
@@ -345,6 +356,12 @@ long syscall_dispatch(syscall_regs_t *regs) {
     long a1 = (long)regs->rdi, a2 = (long)regs->rsi, a3 = (long)regs->rdx;
     long a4 = (long)regs->r10, a5 = (long)regs->r8;
     long result;
+
+#ifdef SYSCALL_TRACE
+    console_write("<sc ");
+    console_write_dec((uint64_t)nr);
+    console_write(">");
+#endif
 
     switch (nr) {
     case SYS_read:
@@ -435,6 +452,24 @@ long syscall_dispatch(syscall_regs_t *regs) {
     case SYS_getrandom:
         result = do_getrandom((uint8_t *)a1, (size_t)a2);
         break;
+    case SYS_getcwd:
+        result = do_getcwd((char *)a1, (size_t)a2);
+        break;
+    case SYS_kill:
+    case SYS_tkill:
+    case SYS_tgkill: {
+        /* A process signalling itself with a fatal signal (abort() uses
+         * tgkill+SIGABRT) terminates with the conventional 128+signo status
+         * instead of faulting on an unhandled instruction afterwards. */
+        int sig = (nr == SYS_tgkill) ? (int)a3 : (int)a2;
+        if (sig > 0) {
+            current_process->exit_status = 128 + sig;
+            current_process->exited = true;
+            kernel_return((uint64_t)(128 + sig));
+        }
+        result = 0;
+        break;
+    }
     case SYS_sendfile:
         result = do_sendfile((int)a1, (int)a2, (int64_t *)a3, (size_t)a4);
         break;

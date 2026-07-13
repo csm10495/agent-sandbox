@@ -51,6 +51,7 @@ const char *thread_name(size_t index);
 uint32_t cpu_discover(void);
 void cpu_enable_lapic(void);
 uint32_t cpu_start_aps(void);
+void cpu_enable_sse(void);
 
 /* ---- Linux x86_64 ABI compatibility layer ---------------------------- */
 
@@ -80,6 +81,8 @@ void pmm_init(uintptr_t ram_top);
 uintptr_t pmm_alloc_frame(void);
 void pmm_free_frame(uintptr_t frame);
 void pmm_reserve(uintptr_t start, uintptr_t end);
+uintptr_t pmm_alloc_contiguous(size_t bytes);
+void pmm_free_contiguous(uintptr_t base, size_t bytes);
 size_t pmm_free_count(void);
 
 /* An address space is a top-level page table (PML4) plus per-process state. */

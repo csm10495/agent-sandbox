@@ -51,6 +51,25 @@ static bool checksum_ok(const void *data, size_t length) {
     return sum == 0;
 }
 
+/* Enable the x87 FPU and SSE/SSE2. The x86_64 psABI guarantees SSE2, so
+ * glibc-static and other Linux binaries emit SSE instructions from their very
+ * first startup code; without OSFXSR set those trap as #UD. The kernel itself
+ * is built with -mgeneral-regs-only, so it never uses these registers, but user
+ * programs rely on them. */
+void cpu_enable_sse(void) {
+    uint64_t cr0, cr4;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 &= ~(1ULL << 2); /* clear EM: no x87 emulation */
+    cr0 &= ~(1ULL << 3); /* clear TS: FPU/SSE usable immediately */
+    cr0 |= (1ULL << 1);  /* set MP */
+    __asm__ volatile("mov %0, %%cr0" : : "r"(cr0));
+    __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
+    cr4 |= (1ULL << 9);  /* OSFXSR: enable FXSAVE and SSE */
+    cr4 |= (1ULL << 10); /* OSXMMEXCPT: unmasked SIMD FP exceptions via #XM */
+    __asm__ volatile("mov %0, %%cr4" : : "r"(cr4));
+    __asm__ volatile("fninit");
+}
+
 uint32_t cpu_discover(void) {
     const rsdp_t *rsdp = NULL;
     for (uintptr_t addr = 0xe0000; addr < 0x100000; addr += 16) {

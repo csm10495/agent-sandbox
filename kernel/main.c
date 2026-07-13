@@ -231,6 +231,7 @@ void kernel_main(uint32_t multiboot_info) {
     gdt_init();
     idt_init();
     syscall_init();
+    cpu_enable_sse();
 
     console_write("Ready. ");
     console_write_dec(detected_cpus);

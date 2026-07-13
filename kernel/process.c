@@ -75,7 +75,7 @@ static uintptr_t build_stack(const elf_image_t *img, int argc,
     }
 
     uint8_t random16[16];
-    for (int i = 0; i < 16; i++) random16[i] = random_byte();
+    for (int i = 0; i < 16; i++) random16[i] = random_byte() & 0; /* TEMP diag */
     sp = push_bytes(sp, random16, sizeof(random16));
     uintptr_t random_addr = sp;
 
@@ -131,8 +131,21 @@ int process_run(const uint8_t *elf_data, size_t elf_size, int argc,
                 const char *const argv[]) {
     if (argc > MAX_ARGS) argc = MAX_ARGS;
 
+    /* Stage the module into the frame pool before installing the process CR3.
+     * The pool is identity-mapped in every address space, whereas the module's
+     * original location may fall inside the user virtual window and become
+     * unreachable once the process page tables are active. */
+    uintptr_t staged = pmm_alloc_contiguous(elf_size);
+    if (!staged) {
+        console_write("run: out of memory staging module image\n");
+        return -1;
+    }
+    memcpy((void *)staged, elf_data, elf_size);
+    const uint8_t *image = (const uint8_t *)staged;
+
     address_space_t *space = vmm_create();
     if (!space) {
+        pmm_free_contiguous(staged, elf_size);
         console_write("run: out of memory building address space\n");
         return -1;
     }
@@ -140,10 +153,11 @@ int process_run(const uint8_t *elf_data, size_t elf_size, int argc,
     vmm_switch(space);
 
     elf_image_t img;
-    int rc = elf_load(space, elf_data, elf_size, &img);
+    int rc = elf_load(space, image, elf_size, &img);
     if (rc != 0) {
         vmm_switch_kernel();
         vmm_destroy(space);
+        pmm_free_contiguous(staged, elf_size);
         console_write("run: not a loadable x86_64 Linux ELF (code ");
         console_write_dec((uint64_t)(-rc));
         console_write(")\n");
@@ -154,6 +168,7 @@ int process_run(const uint8_t *elf_data, size_t elf_size, int argc,
                            USER_STACK_SIZE, true, false) != 0) {
         vmm_switch_kernel();
         vmm_destroy(space);
+        pmm_free_contiguous(staged, elf_size);
         console_write("run: could not map user stack\n");
         return -1;
     }
@@ -178,5 +193,6 @@ int process_run(const uint8_t *elf_data, size_t elf_size, int argc,
     vmm_switch_kernel();
     current_process = NULL;
     vmm_destroy(space);
+    pmm_free_contiguous(staged, elf_size);
     return (int)status;
 }
