@@ -269,7 +269,10 @@ static long do_mmap(uintptr_t addr, size_t length, uint64_t flags, int fd) {
 static long do_ioctl(int fd, uint64_t request, void *arg) {
     if (fd < 0 || fd >= MAX_FDS || !current_process->fds[fd].in_use) return -EBADF;
     if (current_process->fds[fd].is_console && request == 0x5401 /* TCGETS */) {
-        if (arg) memset(arg, 0, 60);
+        /* glibc's tcgetattr()/isatty() passes a struct __kernel_termios, which
+         * is 36 bytes on x86-64 (4 tcflag_t + c_line + cc_t c_cc[19]); writing
+         * more than that overflows the caller's on-stack buffer. */
+        if (arg) memset(arg, 0, 36);
         return 0;
     }
     return -ENOTTY;

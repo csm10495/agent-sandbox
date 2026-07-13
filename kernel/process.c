@@ -75,7 +75,7 @@ static uintptr_t build_stack(const elf_image_t *img, int argc,
     }
 
     uint8_t random16[16];
-    for (int i = 0; i < 16; i++) random16[i] = random_byte() & 0; /* TEMP diag */
+    for (int i = 0; i < 16; i++) random16[i] = random_byte();
     sp = push_bytes(sp, random16, sizeof(random16));
     uintptr_t random_addr = sp;
 
