@@ -34,7 +34,7 @@ export function validateData(value: unknown): AppData {
   const ids = all.map((item) => (item as Record<string, unknown>).id)
   if (new Set(ids).size !== ids.length) throw new Error('The backup contains duplicate IDs.')
   for (const person of data.people) {
-    if (!isRecord(person) || !hasString(person, 'name') || typeof person.archived !== 'boolean') {
+    if (!isRecord(person) || !hasString(person, 'name') || typeof person.archived !== 'boolean' || !validImage(person.photo)) {
       throw new Error('The backup contains an invalid person.')
     }
   }

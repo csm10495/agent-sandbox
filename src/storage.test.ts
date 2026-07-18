@@ -28,13 +28,21 @@ describe('local data', () => {
   it('accepts image data inside a replacement backup', async () => {
     const backup = {
       ...EMPTY_DATA,
-      people: [{ id: 'p1', name: 'Alice', archived: false }],
+      people: [{ id: 'p1', name: 'Alice', archived: false, photo: 'data:image/jpeg;base64,YQ==' }],
       seasons: [{
         id: 's1', name: '2026', archived: false, pastas: [{ id: 'd1', name: 'Rigatoni', archived: false, image: 'data:image/jpeg;base64,YQ==' }],
         sauces: [], proteins: [], soups: [], salad: { id: 'salad', name: 'Salad', archived: false },
       }],
     }
     await expect(readImport(new File([JSON.stringify(backup)], 'backup.json'))).resolves.toEqual(backup)
+  })
+
+  it('rejects unsafe person photos', () => {
+    const unsafe = {
+      ...EMPTY_DATA,
+      people: [{ id: 'p1', name: 'Alice', archived: false, photo: 'data:image/svg+xml,<svg />' }],
+    }
+    expect(() => validateData(unsafe)).toThrow('invalid person')
   })
 
   it('rejects dangling references and unsafe image formats', () => {

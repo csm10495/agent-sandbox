@@ -214,7 +214,7 @@ function TripDetail({ data, trip, update, remove, onBack }: {
     {people.map((person) => {
       const plates = trip.plates.filter((plate) => plate.personId === person?.id)
       return <article className="person-group" key={person?.id}>
-        <h3>{person?.name} <span>{plates.length} plates</span></h3>
+        <h3>{person?.photo && <img src={person.photo} alt="" />}{person?.name} <span>{plates.length} plates</span></h3>
         {plates.length === 0 && <p className="muted">Waiting for their first plate…</p>}
         {plates.map((plate, index) => <div className="plate-row" key={plate.id}>
           {plate.photo || menuImage(season, plate)
@@ -361,8 +361,11 @@ function Setup({ data, setData }: { data: AppData; setData: (data: AppData) => v
       <article className="card">
         <h3>Tracked people</h3>
         <form className="inline-form" onSubmit={addPerson}><input name="name" aria-label="Person name" placeholder="Name" required /><button className="button primary compact">Add</button></form>
-        <div className="manage-list">{data.people.map((person) => <div key={person.id}>
+        <div className="manage-list people-list">{data.people.map((person) => <div key={person.id}>
           <span className={person.archived ? 'archived' : ''}>{person.name}</span>
+          <ImageInput label="person photo" value={person.photo} onChange={(photo) =>
+            setData({ ...data, people: data.people.map((item) => item.id === person.id ? { ...item, photo } : item) })
+          } />
           <button className="link" onClick={() => setData({ ...data, people: data.people.map((item) => item.id === person.id ? { ...item, archived: !item.archived } : item) })}>
             {person.archived ? 'Restore' : 'Archive'}
           </button>

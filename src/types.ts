@@ -5,6 +5,7 @@ export type PastaSize = 'large' | 'small'
 export interface Person {
   id: string
   name: string
+  photo?: string
   archived: boolean
 }
 

@@ -12,6 +12,7 @@ describe('app', () => {
     await user.type(screen.getByLabelText('Person name'), 'Alice')
     await user.click(screen.getByRole('button', { name: 'Add' }))
     expect(screen.getByText('Alice')).toBeInTheDocument()
+    expect(screen.getByLabelText('Add person photo')).toHaveAttribute('accept', 'image/*;capture=camera')
     expect(localStorage.getItem('never-ending-pasta-tracker')).toContain('Alice')
   })
 

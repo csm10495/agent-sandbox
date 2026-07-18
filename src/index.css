@@ -99,6 +99,7 @@ legend, .field > span { display: block; font-size: .78rem; font-weight: 700; tex
 .sticky-add { width: 100%; margin-bottom: 20px; }
 .person-group { margin: 24px 0; }
 .person-group h3 { display: flex; align-items: center; gap: 9px; border-bottom: 2px solid var(--gold); padding-bottom: 8px; }
+.person-group h3 img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
 .person-group h3 span { color: var(--muted); font: 600 .75rem 'DM Sans', sans-serif; }
 .plate-row { display: flex; align-items: center; gap: 10px; background: white; border-bottom: 1px solid var(--line); padding: 11px 5px; }
 .plate-row > img { width: 48px; height: 48px; border-radius: 10px; object-fit: cover; }
@@ -129,6 +130,8 @@ legend, .field > span { display: block; font-size: .78rem; font-weight: 700; tex
 .inline-form { display: flex; gap: 8px; margin-bottom: 12px; }
 .manage-list { display: grid; gap: 6px; }
 .manage-list > div, .season-link { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line); padding: 10px 0; }
+.people-list > div { flex-wrap: wrap; gap: 8px; }
+.people-list .image-input { order: 3; flex-basis: 100%; }
 .archived { text-decoration: line-through; color: var(--muted); }
 .season-link { width: 100%; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; }
 .season-link span { display: grid; gap: 2px; }
