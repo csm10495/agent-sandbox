@@ -15,6 +15,17 @@ describe('app', () => {
     expect(localStorage.getItem('never-ending-pasta-tracker')).toContain('Alice')
   })
 
+  it('offers the camera and existing photos for image inputs', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: /setup/i }))
+    await user.type(screen.getByLabelText('Name'), '2026 Pasta Bowl')
+    await user.click(screen.getByRole('button', { name: 'Create season' }))
+    const input = screen.getByLabelText('Add menu photo')
+    expect(input).toHaveAttribute('accept', 'image/*;capture=camera')
+    expect(input).not.toHaveAttribute('capture')
+  })
+
   it('reports the offline update-check state', async () => {
     const user = userEvent.setup()
     vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false)

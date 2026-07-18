@@ -48,8 +48,7 @@ function ImageInput({ value, onChange, label = 'Photo' }: {
       {busy ? 'Compressing…' : value ? `Replace ${label}` : `Add ${label}`}
       <input
         type="file"
-        accept="image/*"
-        capture="environment"
+        accept="image/*;capture=camera"
         disabled={busy}
         onChange={async (event) => {
           const file = event.target.files?.[0]
