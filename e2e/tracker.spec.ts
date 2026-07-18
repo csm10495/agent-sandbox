@@ -2,6 +2,16 @@ import { expect, test } from '@playwright/test'
 
 test('configures a season and records every plate type', async ({ page }) => {
   await page.goto('')
+  const encodedPhoto = await page.evaluate(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 20
+    canvas.height = 20
+    const context = canvas.getContext('2d')!
+    context.fillStyle = 'tomato'
+    context.fillRect(0, 0, 20, 20)
+    return canvas.toDataURL('image/png').split(',')[1]
+  })
+  const photo = { name: 'plate.png', mimeType: 'image/png', buffer: Buffer.from(encodedPhoto, 'base64') }
   await page.getByRole('button', { name: /setup/i }).click()
   await page.getByLabel('Person name').fill('Alice')
   await page.getByRole('button', { name: 'Add' }).click()
@@ -28,8 +38,11 @@ test('configures a season and records every plate type', async ({ page }) => {
   await page.getByRole('combobox', { name: 'Protein' }).selectOption({ label: 'Meatballs' })
   await page.getByText('large', { exact: true }).click()
   await page.getByText('Taken home', { exact: true }).click()
+  await page.locator('.modal input[type=file]').setInputFiles(photo)
+  await expect(page.getByAltText('plate photo preview')).toBeVisible()
   await page.getByRole('button', { name: 'Save plate' }).click()
   await expect(page.getByText('Large Rigatoni · Alfredo · Meatballs')).toBeVisible()
+  await expect(page.getByAltText('This plate')).toBeVisible()
 
   await page.getByRole('button', { name: 'Add a plate' }).click()
   await page.getByText('soup', { exact: true }).click()

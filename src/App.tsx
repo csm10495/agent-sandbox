@@ -218,7 +218,9 @@ function TripDetail({ data, trip, update, remove, onBack }: {
         <h3>{person?.name} <span>{plates.length} plates</span></h3>
         {plates.length === 0 && <p className="muted">Waiting for their first plate…</p>}
         {plates.map((plate, index) => <div className="plate-row" key={plate.id}>
-          {plate.photo ? <img src={plate.photo} alt="" /> : <span className="plate-number">{index + 1}</span>}
+          {plate.photo || menuImage(season, plate)
+            ? <img src={plate.photo || menuImage(season, plate)} alt={plate.photo ? 'This plate' : `${plate.dishName} menu`} />
+            : <span className="plate-number">{index + 1}</span>}
           <span><strong>{plateLabel(plate)}</strong><small>{plate.outcome.replace('-', ' ')}{plate.notes ? ` · ${plate.notes}` : ''}</small></span>
           <div className="row-actions">
             <button className="icon-button" title="Order this again" onClick={() => {
@@ -251,6 +253,13 @@ const emptyPlate = () => ({
   photo: undefined as string | undefined,
   notes: '',
 })
+
+function menuImage(season: Season | undefined, plate: Trip['plates'][number]) {
+  if (!season) return undefined
+  if (plate.kind === 'salad') return season.salad.image
+  if (plate.kind === 'soup') return season.soups.find((item) => item.id === plate.dishId)?.image
+  return season.pastas.find((item) => item.id === plate.pastaId)?.image
+}
 
 function PlateForm({ season, people, initial, onSave, onCancel }: {
   season: Season

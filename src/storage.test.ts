@@ -36,4 +36,21 @@ describe('local data', () => {
     }
     await expect(readImport(new File([JSON.stringify(backup)], 'backup.json'))).resolves.toEqual(backup)
   })
+
+  it('rejects dangling references and unsafe image formats', () => {
+    const dangling = {
+      ...EMPTY_DATA,
+      trips: [{ id: 't1', seasonId: 'missing', date: '2026-01-01', participantIds: [], plates: [] }],
+    }
+    expect(() => validateData(dangling)).toThrow('invalid plates or participants')
+    const unsafe = {
+      ...EMPTY_DATA,
+      seasons: [{
+        id: 's1', name: '2026', archived: false,
+        pastas: [{ id: 'd1', name: 'Rigatoni', archived: false, image: 'data:image/svg+xml,<svg />' }],
+        sauces: [], proteins: [], soups: [], salad: { id: 'salad', name: 'Salad', archived: false },
+      }],
+    }
+    expect(() => validateData(unsafe)).toThrow('invalid menu dish')
+  })
 })
