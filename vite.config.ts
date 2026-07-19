@@ -11,7 +11,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: false,
-      includeAssets: ['pasta-icon.svg'],
+      includeAssets: ['pasta-icon.svg', 'pasta-icon.ico'],
       manifest: {
         name: 'Never Ending Pasta Tracker',
         short_name: 'Pasta Tracker',
