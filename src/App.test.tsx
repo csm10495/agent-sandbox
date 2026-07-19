@@ -45,6 +45,24 @@ describe('app', () => {
     expect(applyUpdate).toHaveBeenCalledOnce()
   })
 
+  it('defaults to the device theme and persists an explicit choice', async () => {
+    const user = userEvent.setup()
+    const { unmount } = render(<App />)
+    await user.click(screen.getByRole('button', { name: /settings/i }))
+    expect(screen.getByRole('radio', { name: 'system' })).toBeChecked()
+    expect(document.documentElement).not.toHaveAttribute('data-theme')
+
+    await user.click(screen.getByRole('radio', { name: 'dark' }))
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
+    expect(localStorage.getItem('never-ending-pasta-tracker-theme')).toBe('dark')
+
+    unmount()
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: /settings/i }))
+    expect(screen.getByRole('radio', { name: 'dark' })).toBeChecked()
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
+  })
+
   it('keeps data when a replacement import is cancelled', async () => {
     localStorage.setItem('never-ending-pasta-tracker', JSON.stringify({
       ...EMPTY_DATA, people: [{ id: 'p1', name: 'Alice', archived: false }],

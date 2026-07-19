@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { compressImage } from './image'
 import { exportData, loadData, readImport, saveData, STORAGE_KEY } from './storage'
 import { getStats, plateLabel } from './stats'
@@ -16,6 +16,7 @@ import './App.css'
 
 type Tab = 'dashboard' | 'trips' | 'setup' | 'settings'
 type UpdateState = 'idle' | 'checking' | 'current' | 'available' | 'offline' | 'error'
+type Theme = 'system' | 'light' | 'dark'
 
 interface UpdateControls {
   registration?: ServiceWorkerRegistration
@@ -26,6 +27,15 @@ interface UpdateControls {
 const today = () => new Date().toISOString().slice(0, 10)
 const active = (items: Dish[]) => items.filter((item) => !item.archived)
 const dish = (name: string): Dish => ({ id: id(), name, archived: false })
+const THEME_KEY = 'never-ending-pasta-tracker-theme'
+const loadTheme = (): Theme => {
+  try {
+    const saved = localStorage.getItem(THEME_KEY)
+    return saved === 'light' || saved === 'dark' ? saved : 'system'
+  } catch {
+    return 'system'
+  }
+}
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="field"><span>{label}</span>{children}</label>
@@ -427,7 +437,13 @@ function DishList({ title, dishes, onChange }: { title: string; dishes: Dish[]; 
   </article>
 }
 
-function Settings({ data, replaceData, updates }: { data: AppData; replaceData: (data: AppData) => void; updates: UpdateControls }) {
+function Settings({ data, replaceData, updates, theme, setTheme }: {
+  data: AppData
+  replaceData: (data: AppData) => void
+  updates: UpdateControls
+  theme: Theme
+  setTheme: (theme: Theme) => void
+}) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [message, setMessage] = useState('')
   const [updateState, setUpdateState] = useState<UpdateState>(updates.updateReady ? 'available' : 'idle')
@@ -448,6 +464,18 @@ function Settings({ data, replaceData, updates }: { data: AppData; replaceData: 
   return <section className="page">
     <header className="page-head"><div><p className="eyebrow">Your pasta pantry</p><h2>Settings</h2></div></header>
     <div className="settings-grid">
+      <article className="card">
+        <h3>Appearance</h3>
+        <p className="muted">Use your device setting or choose a theme for this browser.</p>
+        <fieldset>
+          <legend>Color theme</legend>
+          <div className="segmented theme-options">
+            {(['system', 'light', 'dark'] as Theme[]).map((value) =>
+              <label key={value}><input type="radio" name="theme" value={value} checked={theme === value} onChange={() => setTheme(value)} />{value}</label>,
+            )}
+          </div>
+        </fieldset>
+      </article>
       <article className="card">
         <h3>Backup & restore</h3><p className="muted">Photos are compressed and included in your JSON backup.</p>
         <div className="button-stack"><button className="button primary" onClick={() => exportData(data)}>Export JSON backup</button>
@@ -489,6 +517,15 @@ export default function App({ updates = { updateReady: false, applyUpdate: () =>
   const [data, setDataState] = useState(loadData)
   const [tab, setTab] = useState<Tab>('dashboard')
   const [online, setOnline] = useState(navigator.onLine)
+  const [theme, setThemeState] = useState<Theme>(loadTheme)
+  const setTheme = (next: Theme) => {
+    try {
+      if (next === 'system') localStorage.removeItem(THEME_KEY)
+      else localStorage.setItem(THEME_KEY, next)
+    } finally {
+      setThemeState(next)
+    }
+  }
   const setData = (next: AppData) => {
     try {
       saveData(next)
@@ -502,13 +539,18 @@ export default function App({ updates = { updateReady: false, applyUpdate: () =>
     addEventListener('online', update); addEventListener('offline', update)
     return () => { removeEventListener('online', update); removeEventListener('offline', update) }
   }, [])
+  useLayoutEffect(() => {
+    if (theme === 'system') delete document.documentElement.dataset.theme
+    else document.documentElement.dataset.theme = theme
+    return () => { delete document.documentElement.dataset.theme }
+  }, [theme])
   return <div className="app-shell">
     <header className="brand"><div className="logo" aria-hidden="true">🍝</div><div><h1>Never Ending</h1><p>Pasta Tracker</p></div><span className={online ? 'online' : 'offline'}>{online ? 'Online' : 'Offline'}</span></header>
     <main>
       {tab === 'dashboard' && <Dashboard data={data} />}
       {tab === 'trips' && <Trips data={data} setData={setData} />}
       {tab === 'setup' && <Setup data={data} setData={setData} />}
-      {tab === 'settings' && <Settings data={data} replaceData={setData} updates={updates} />}
+      {tab === 'settings' && <Settings data={data} replaceData={setData} updates={updates} theme={theme} setTheme={setTheme} />}
     </main>
     <nav className="bottom-nav" aria-label="Main navigation">
       {([['dashboard', '⌂', 'Stats'], ['trips', '🍽', 'Outings'], ['setup', '⚙', 'Setup'], ['settings', '☰', 'Settings']] as [Tab, string, string][]).map(([value, icon, label]) =>
