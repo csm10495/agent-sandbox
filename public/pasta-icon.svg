@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Spaghetti twirled around a fork with tomato sauce</title>
+  <rect width="512" height="512" rx="112" fill="#64734b"/>
+  <circle cx="256" cy="256" r="190" fill="#fff1ca"/>
+
+  <g transform="rotate(8 256 256)">
+    <g fill="none" stroke="#d99a2b" stroke-width="38" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M143 303c25-58 199-66 226-8"/>
+      <path d="M155 335c29-54 181-57 210-5"/>
+      <path d="M181 363c34-42 126-43 164-5"/>
+    </g>
+    <g fill="none" stroke="#f6c453" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M143 303c25-58 199-66 226-8"/>
+      <path d="M155 335c29-54 181-57 210-5"/>
+      <path d="M181 363c34-42 126-43 164-5"/>
+    </g>
+
+    <path d="M256 69c-17 0-31 14-31 31v126c0 18-8 31-19 43l-10 11c-7 8-2 20 8 21h104c10-1 15-13 8-21l-10-11c-11-12-19-25-19-43V100c0-17-14-31-31-31z" fill="#a7adb0" stroke="#565c5e" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M256 82c-10 0-18 8-18 18v128c0 22-10 40-23 54h82c-13-14-23-32-23-54V100c0-10-8-18-18-18z" fill="#e7ecec"/>
+    <g fill="none" stroke="#565c5e" stroke-width="30" stroke-linecap="round">
+      <path d="M213 273v91"/>
+      <path d="M256 273v103"/>
+      <path d="M299 273v91"/>
+    </g>
+    <g fill="none" stroke="#e7ecec" stroke-width="16" stroke-linecap="round">
+      <path d="M213 273v91"/>
+      <path d="M256 273v103"/>
+      <path d="M299 273v91"/>
+    </g>
+
+    <g fill="none" stroke="#d99a2b" stroke-width="40" stroke-linecap="round">
+      <path d="M145 319c45 39 177 42 223 2"/>
+      <path d="M171 350c42 31 130 32 172 1"/>
+    </g>
+    <g fill="none" stroke="#f6c453" stroke-width="25" stroke-linecap="round">
+      <path d="M145 319c45 39 177 42 223 2"/>
+      <path d="M171 350c42 31 130 32 172 1"/>
+      <path d="M349 351c25 27 29 65 9 90"/>
+    </g>
+
+    <g fill="none" stroke="#df713b" stroke-width="18" stroke-linecap="round">
+      <path d="M169 299c38-21 79-25 119-17"/>
+      <path d="M218 331c39 10 81 7 119-8"/>
+      <path d="M194 358c30 12 64 15 96 8"/>
+    </g>
+    <g fill="#f09355">
+      <circle cx="178" cy="299" r="7"/>
+      <circle cx="325" cy="324" r="7"/>
+      <circle cx="232" cy="359" r="6"/>
+    </g>
+  </g>
+</svg>
